@@ -21,10 +21,39 @@ function extractEmail(text) {
   return cleanText((text.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i) || [])[0]);
 }
 
-function extractMobile(text) {
-  const match = text.match(/(?:\+?91[-\s]?)?[6-9]\d{9}/);
-  if (!match) return '';
-  return match[0].replace(/[^\d+]/g, '');
+function normalizeIndianMobile(rawValue) {
+  const digits = rawValue.replace(/\D/g, '');
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
+  if (digits.length === 10) return digits;
+  return '';
+}
+
+function extractMobiles(text) {
+  const normalizedText = text.replace(/[oO]/g, '0').replace(/[lI|]/g, '1');
+  const uniqueNumbers = new Set();
+
+  const addMobile = (value) => {
+    const normalized = normalizeIndianMobile(value);
+    if (/^[6-9]\d{9}$/.test(normalized)) uniqueNumbers.add(normalized);
+  };
+
+  const formattedMatches = normalizedText.match(/(?:\+?91[\s().,-]*)?[6-9](?:[\s().,-]*\d){9}/g) || [];
+  formattedMatches.forEach((value) => addMobile(value));
+
+  const digitTokens = normalizedText.replace(/[^\d]/g, ' ').split(/\s+/).filter(Boolean);
+  digitTokens.forEach((token) => {
+    if (token.length < 10) return;
+
+    if (token.length <= 12) addMobile(token);
+
+    for (let i = 0; i <= token.length - 10; i += 1) {
+      const candidate = token.slice(i, i + 10);
+      if (/^[6-9]\d{9}$/.test(candidate)) uniqueNumbers.add(candidate);
+    }
+  });
+
+  return Array.from(uniqueNumbers);
 }
 
 function extractUPI(text) {
@@ -45,6 +74,25 @@ function extractName(text, foundValues) {
     if (Object.values(foundValues).some((value) => value && line.includes(value))) continue;
     return cleanText(line);
   }
+  return '';
+}
+
+function extractNameForMobileLine(lines, lineIndex) {
+  const currentLine = cleanText(lines[lineIndex] || '');
+  const withoutNumbers = cleanText(currentLine.replace(/(?:\+?91[\s().,-]*)?[6-9](?:[\s().,-]*\d){9}/g, ''));
+
+  if (withoutNumbers && !/\d/.test(withoutNumbers) && !/[@:]/.test(withoutNumbers)) {
+    return withoutNumbers;
+  }
+
+  for (let offset = 1; offset <= 2; offset += 1) {
+    const prev = cleanText(lines[lineIndex - offset] || '');
+    if (!prev) continue;
+    if (prev.length < 3 || prev.length > 60) continue;
+    if (/\d/.test(prev) || /[@:]/.test(prev) || prev.toLowerCase().includes('upi')) continue;
+    return prev;
+  }
+
   return '';
 }
 
@@ -133,17 +181,39 @@ async function runOCR(file) {
   } = await Tesseract.recognize(file, 'eng');
 
   const email = extractEmail(text);
-  const mobile = extractMobile(text);
   const upi = extractUPI(text);
-  const name = extractName(text, { email, mobile, upi });
+  const lines = text
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
 
-  return {
-    file: file.name,
-    name,
-    mobile,
-    email,
-    upi,
-  };
+  const mobiles = extractMobiles(text);
+  const fallbackName = extractName(text, { email, upi });
+
+  if (!mobiles.length) {
+    return [
+      {
+        file: file.name,
+        name: fallbackName || 'Name not found',
+        mobile: '',
+        email,
+        upi,
+      },
+    ];
+  }
+
+  return mobiles.map((mobile) => {
+    const lineIndex = lines.findIndex((line) => extractMobiles(line).includes(mobile));
+    const mappedName = lineIndex >= 0 ? extractNameForMobileLine(lines, lineIndex) : '';
+
+    return {
+      file: file.name,
+      name: mappedName || fallbackName || 'Name not found',
+      mobile,
+      email,
+      upi,
+    };
+  });
 }
 
 extractBtn.addEventListener('click', async () => {
@@ -168,14 +238,17 @@ extractBtn.addEventListener('click', async () => {
   try {
     for (let i = 0; i < files.length; i += 1) {
       showStatus(`Processing ${i + 1}/${files.length}: ${files[i].name}`);
-      const result = await runOCR(files[i]);
-      extractedRows.push(applyFieldSelection(result, fields));
+      const results = await runOCR(files[i]);
+      results
+        .filter((result) => !fields.includes('mobile') || result.mobile)
+        .forEach((result) => extractedRows.push(applyFieldSelection(result, fields)));
     }
 
     const orderedRows = extractedRows.map(objectToOrderedRow);
     renderTable(orderedRows);
     enableActions(orderedRows.length > 0);
-    showStatus(`Done. Extracted data from ${orderedRows.length} screenshot(s).`);
+    const mobileCount = orderedRows.filter((row) => row.Mobile).length;
+    showStatus(`Done. Extracted ${orderedRows.length} row(s) with ${mobileCount} mobile number(s).`);
   } catch (error) {
     console.error(error);
     showStatus('Extraction failed. Please try with clearer screenshots.', true);
