@@ -1,0 +1,57 @@
+# 📋 Screenshot Data Extractor
+
+Extract contact details (Name, Mobile, Email, UPI ID) from WhatsApp screenshots using **Google Gemini AI Vision**.
+
+🔗 **Live Tool:** [Click here to use](https://YOUR-USERNAME.github.io/screenshot-extractor/extractor.html)
+*(Replace YOUR-USERNAME with your GitHub username after deploying)*
+
+---
+
+## ✨ Features
+
+- 📸 Upload multiple screenshots at once
+- 🤖 AI-powered extraction using Google Gemini 1.5 Flash
+- ✅ Reads numbers, names, emails, UPI IDs accurately
+- 🔍 Duplicate number detection
+- 📥 Download results as CSV or Excel (.xlsx)
+- 📋 Copy individual columns (Names / Mobiles / Emails / UPI IDs)
+- 🌙 Works with dark mode & light mode screenshots
+- 🔒 API key stored in your browser only — never shared
+
+---
+
+## 🚀 How to Use
+
+1. Open the live link above in your browser
+2. Get a **free Gemini API key** from [aistudio.google.com/app/apikey](https://aistudio.google.com/app/apikey)
+   - Select **Gemini 1.5 Flash** model → **1,500 images/day free**
+3. Paste your API key in the box → click **Save Key**
+4. Upload your WhatsApp screenshots
+5. Click **Extract from Screenshots**
+6. Download as CSV or Excel
+
+---
+
+## ⚠️ Important
+
+- **Never share your API key** with anyone
+- Your API key is saved only in your own browser (localStorage)
+- It is NOT stored in any file or server
+- Free tier: **1,500 requests/day** with Gemini 1.5 Flash
+
+---
+
+## 📁 Files
+
+| File | Description |
+|------|-------------|
+| `extractor.html` | The complete app — single file, open in any browser |
+| `README.md` | This file |
+
+---
+
+## 🛠 Tech Stack
+
+- Pure HTML + CSS + JavaScript (no framework)
+- Google Gemini 1.5 Flash Vision API
+- SheetJS (xlsx) for Excel export
