@@ -14,10 +14,12 @@ const imageModal = document.getElementById('imageModal');
 const modalImage = document.getElementById('modalImage');
 const modalCaption = document.getElementById('modalCaption');
 const closeModalBtn = document.getElementById('closeModalBtn');
+const selectedCountEl = document.getElementById('selectedCount');
 
 const headers = ['File', 'Name', 'Mobile', 'Email', 'UPI ID'];
 let extractedRows = [];
 let previewUrls = [];
+let selectedFiles = [];
 
 function selectedFields() {
   return Array.from(document.querySelectorAll('.field-checkbox:checked')).map((item) => item.value);
@@ -193,6 +195,33 @@ function applyFieldSelection(record, fields) {
   };
 }
 
+function fileKey(file) {
+  return `${file.name}__${file.size}__${file.lastModified}`;
+}
+
+function updateSelectedCount() {
+  selectedCountEl.textContent = selectedFiles.length
+    ? `${selectedFiles.length} file(s) selected.`
+    : 'No files selected yet.';
+}
+
+function addSelectedFiles(newFiles) {
+  const seen = new Set(selectedFiles.map((file) => fileKey(file)));
+  newFiles.forEach((file) => {
+    const key = fileKey(file);
+    if (!seen.has(key)) {
+      selectedFiles.push(file);
+      seen.add(key);
+    }
+  });
+}
+
+function removeSelectedFile(targetFile) {
+  selectedFiles = selectedFiles.filter((file) => fileKey(file) !== fileKey(targetFile));
+  renderPreviews(selectedFiles);
+  updateSelectedCount();
+}
+
 function clearPreviews() {
   previewUrls.forEach((url) => URL.revokeObjectURL(url));
   previewUrls = [];
@@ -206,9 +235,12 @@ function renderPreviews(files) {
     const url = URL.createObjectURL(file);
     previewUrls.push(url);
 
-    const card = document.createElement('button');
-    card.type = 'button';
+    const card = document.createElement('div');
     card.className = 'preview-card';
+
+    const previewBtn = document.createElement('button');
+    previewBtn.type = 'button';
+    previewBtn.className = 'preview-open-btn';
 
     const img = document.createElement('img');
     img.src = url;
@@ -218,14 +250,26 @@ function renderPreviews(files) {
     name.className = 'preview-name';
     name.textContent = file.name;
 
-    card.appendChild(img);
-    card.appendChild(name);
-    card.addEventListener('click', () => {
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'preview-remove-btn';
+    removeBtn.textContent = '✕';
+    removeBtn.setAttribute('aria-label', `Remove ${file.name}`);
+    removeBtn.addEventListener('click', (event) => {
+      event.stopPropagation();
+      removeSelectedFile(file);
+    });
+
+    previewBtn.appendChild(img);
+    previewBtn.appendChild(name);
+    previewBtn.addEventListener('click', () => {
       modalImage.src = url;
       modalCaption.textContent = file.name;
       imageModal.hidden = false;
     });
 
+    card.appendChild(removeBtn);
+    card.appendChild(previewBtn);
     previewGrid.appendChild(card);
   });
 }
@@ -291,7 +335,10 @@ async function runOCR(file) {
 
 imageInput.addEventListener('change', () => {
   const files = Array.from(imageInput.files || []);
-  renderPreviews(files);
+  addSelectedFiles(files);
+  renderPreviews(selectedFiles);
+  updateSelectedCount();
+  imageInput.value = '';
 });
 
 closeModalBtn.addEventListener('click', () => {
@@ -311,7 +358,7 @@ document.addEventListener('keydown', (event) => {
 });
 
 extractBtn.addEventListener('click', async () => {
-  const files = Array.from(imageInput.files || []);
+  const files = selectedFiles;
   const fields = selectedFields();
 
   if (!files.length) {
