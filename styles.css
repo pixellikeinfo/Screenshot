@@ -1,120 +1,125 @@
 :root {
-    --primary: #2563eb;
-    --success: #10b981;
-    --danger: #ef4444;
-    --bg: #f8fafc;
-    --border: #e2e8f0;
+    --primary-color: #2563eb;
+    --success-color: #16a34a;
+    --error-color: #dc2626;
+    --bg-color: #f1f5f9;
+    --card-bg: #ffffff;
+    --border-color: #cbd5e1;
 }
 
 body {
-    font-family: 'Inter', system-ui, sans-serif;
-    background-color: var(--bg);
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background-color: var(--bg-color);
     margin: 0;
     padding: 20px;
-    color: #1e293b;
+    color: #334155;
 }
 
 .app-shell {
-    max-width: 1100px;
+    max-width: 1200px;
     margin: 0 auto;
 }
 
 header {
     text-align: center;
-    margin-bottom: 30px;
+    margin-bottom: 40px;
 }
 
 .panel {
-    background: white;
-    border: 1px solid var(--border);
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
     border-radius: 12px;
-    padding: 24px;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    padding: 30px;
+    margin-bottom: 25px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.05);
 }
 
 .panel-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 2px solid var(--bg-color);
     margin-bottom: 20px;
     padding-bottom: 10px;
 }
 
-.badge {
-    background: #eff6ff;
-    color: var(--primary);
-    padding: 4px 12px;
-    border-radius: 99px;
-    font-size: 12px;
-    font-weight: 700;
+.step-indicator {
+    background: var(--primary-color);
+    color: white;
+    padding: 5px 15px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: bold;
 }
 
 .preview-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
-    gap: 15px;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 20px;
     margin-top: 20px;
 }
 
 .preview-card {
     position: relative;
-    border: 1px solid var(--border);
-    border-radius: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
     overflow: hidden;
-    cursor: pointer;
+    background: var(--bg-color);
+    cursor: zoom-in;
 }
 
 .preview-card img {
     width: 100%;
-    height: 100px;
+    height: 120px;
     object-fit: cover;
 }
 
-.preview-remove {
+.remove-trigger {
     position: absolute;
     top: 5px;
     right: 5px;
-    background: var(--danger);
+    background: var(--error-color);
     color: white;
     border: none;
     border-radius: 50%;
-    width: 20px;
-    height: 20px;
+    width: 25px;
+    height: 25px;
+    cursor: pointer;
+    font-weight: bold;
+}
+
+.config-grid { margin-bottom: 20px; }
+.checkbox-group { display: flex; flex-wrap: wrap; gap: 20px; }
+
+.main-action-btn {
+    width: 100%;
+    padding: 15px;
+    background: var(--primary-color);
+    color: white;
+    font-size: 18px;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
     cursor: pointer;
 }
 
-.field-grid {
-    display: flex;
-    gap: 20px;
-    margin-bottom: 20px;
-}
+.main-action-btn:disabled { opacity: 0.5; cursor: not-allowed; }
 
-.action-group, .export-group {
+.action-bar, .export-bar {
     display: flex;
+    gap: 12px;
+    margin-bottom: 20px;
     flex-wrap: wrap;
-    gap: 10px;
-    margin-bottom: 20px;
 }
 
-button {
-    padding: 10px 18px;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    border: 1px solid transparent;
-}
+button.btn-secondary { background: #64748b; color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; }
+button.btn-success { background: var(--success-color); color: white; border: none; padding: 10px 15px; border-radius: 6px; cursor: pointer; }
+button.btn-download { background: #0f172a; color: white; border: none; padding: 12px 20px; border-radius: 6px; cursor: pointer; }
 
-.primary-btn { background: var(--primary); color: white; width: 100%; font-size: 16px; }
-.secondary-btn { background: white; border-color: var(--border); }
-.action-btn { background: #f1f5f9; color: #475569; font-size: 13px; }
-.toggle-btn { background: var(--success); color: white; }
-
-.table-container {
+.table-wrapper {
     overflow-x: auto;
-    border: 1px solid var(--border);
     border-radius: 8px;
+    border: 1px solid var(--border-color);
 }
 
 table {
@@ -123,50 +128,44 @@ table {
 }
 
 th, td {
-    padding: 12px 15px;
+    padding: 15px;
     text-align: left;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-color);
 }
 
-th { background: #f8fafc; font-size: 13px; text-transform: uppercase; }
+th { background: #f8fafc; color: #475569; font-weight: 600; }
+.duplicate-row { background-color: #fffbeb; }
 
-.row-duplicate { background-color: #fffbeb; }
-
-/* Modal */
-.image-modal {
+/* Modal Styles */
+.modal {
     position: fixed;
-    inset: 0;
-    z-index: 9999;
-    display: flex;
-    align-items: center;
-    justify-content: center;
+    top: 0; left: 0; width: 100%; height: 100%;
+    display: flex; align-items: center; justify-content: center;
+    z-index: 1000;
 }
 
 .modal-overlay {
     position: absolute;
-    inset: 0;
-    background: rgba(0,0,0,0.8);
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
 }
 
-.modal-content {
+.modal-body {
     position: relative;
     max-width: 90%;
     max-height: 90%;
 }
 
-.modal-content img {
+.modal-img-container img {
     max-width: 100%;
     max-height: 80vh;
-    border: 4px solid white;
-    border-radius: 4px;
+    border: 5px solid white;
+    border-radius: 5px;
 }
 
-.modal-close {
+.close-btn {
     position: absolute;
-    top: -40px;
-    right: 0;
-    color: white;
-    font-size: 35px;
-    background: none;
-    border: none;
+    top: -50px; right: 0;
+    font-size: 40px; color: white;
+    background: none; border: none; cursor: pointer;
 }
