@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Screenshot Data Extractor PRO</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <h1>Screenshot Data Extractor</h1>
+        <p class="subtitle">Extracting Names and Mobiles with +91 support. No data is deleted; duplicates are flagged.</p>
+      </header>
+
+      <section class="panel">
+        <h2>1) Upload screenshots</h2>
+        <input id="imageInput" type="file" accept="image/*" multiple />
+        <p class="hint">Upload the contact list screenshots here.</p>
+        <p id="selectedCount" class="hint"></p>
+        <div id="previewGrid" class="preview-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="panel">
+        <h2>2) Extraction Settings</h2>
+        <div class="field-grid">
+          <label><input type="checkbox" class="field-checkbox" value="name" checked /> Name</label>
+          <label><input type="checkbox" class="field-checkbox" value="mobile" checked /> Mobile</label>
+          <label><input type="checkbox" class="field-checkbox" value="email" checked /> Email</label>
+          <label><input type="checkbox" class="field-checkbox" value="upi" checked /> UPI ID</label>
+        </div>
+        <button id="extractBtn" type="button">Start Full Extraction</button>
+      </section>
+
+      <section class="panel">
+        <h2>3) Results</h2>
+        <div id="status" class="status" aria-live="polite"></div>
+
+        <div class="actions">
+          <button id="copyBtn" type="button" disabled>Copy All (Table)</button>
+          <button id="toggleDupesBtn" type="button" disabled style="background-color: #10b981;">Hide Duplicates</button>
+          <button id="copyNameBtn" type="button" disabled>Copy Names</button>
+          <button id="copyMobileBtn" type="button" disabled>Copy Mobiles</button>
+          <button id="copyEmailBtn" type="button" disabled>Copy Emails</button>
+          <button id="copyUpiBtn" type="button" disabled>Copy UPI IDs</button>
+        </div>
+
+        <div class="actions">
+          <button id="downloadCsvBtn" type="button" disabled>Download CSV</button>
+          <button id="downloadXlsxBtn" type="button" disabled>Download Excel</button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="resultsTable">
+            <thead>
+              <tr>
+                <th>Status</th>
+                <th>File</th>
+                <th>Name</th>
+                <th>Mobile</th>
+                <th>Email</th>
+                <th>UPI ID</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <div id="imageModal" class="image-modal" hidden>
+      <button id="closeModalBtn" class="modal-close" type="button">×</button>
+      <img id="modalImage" alt="Preview" />
+      <p id="modalCaption"></p>
+    </div>
+  </body>
+</html>
