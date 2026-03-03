@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Screenshot Data Extractor</title>
     <link rel="stylesheet" href="styles.css" />
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
     <script src="app.js" defer></script>
   </head>
@@ -14,9 +13,26 @@
       <header>
         <h1>Screenshot Data Extractor</h1>
         <p class="subtitle">
-          Upload one or many screenshots and extract name, mobile number, email, and UPI ID using free in-browser OCR.
+          Upload screenshots and extract contacts using Google Gemini AI — 1,500 images/day free.
         </p>
       </header>
+
+      <!-- API Key Section -->
+      <section class="panel" id="apiKeyPanel">
+        <h2>🔑 Gemini API Key</h2>
+        <p class="hint">
+          Get your <strong>free</strong> key at
+          <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>
+          — gives you <strong>1,500 images/day free</strong> with Gemini 1.5 Flash.
+          Your key is stored only in your browser, never uploaded anywhere.
+        </p>
+        <div class="api-key-row">
+          <input id="apiKeyInput" type="password" placeholder="Paste your Gemini API key here (AIzaSy...)" autocomplete="off" />
+          <button id="saveKeyBtn" type="button">Save Key</button>
+          <button id="clearKeyBtn" type="button" class="btn-secondary">Clear</button>
+        </div>
+        <p id="apiKeyStatus" class="hint"></p>
+      </section>
 
       <section class="panel">
         <h2>1) Upload screenshots</h2>
