@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Ultimate Screenshot Data Extractor PRO</title>
+    <title>Professional Screenshot Data Extractor</title>
     <link rel="stylesheet" href="styles.css">
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
@@ -13,82 +13,78 @@
     <div class="app-shell">
         <header>
             <h1>Screenshot Data Extractor</h1>
-            <p class="subtitle">Precision extraction for Names and Indian Mobiles (+91).</p>
+            <p class="subtitle">Extract Names, Indian Mobiles (+91), Emails, and UPI IDs with zero data loss.</p>
         </header>
 
         <section class="panel">
             <div class="panel-header">
                 <h2>1) Upload Screenshots</h2>
-                <span class="step-indicator">Step 1</span>
+                <span class="badge">Step 1</span>
             </div>
-            <div class="upload-container">
+            <div class="upload-area">
                 <input id="imageInput" type="file" accept="image/*" multiple>
-                <p class="upload-hint">You can select multiple screenshots at once.</p>
-                <p id="selectedCount" class="status-count">0 files selected</p>
+                <p class="hint">Select multiple images. Higher resolution is better for OCR accuracy.</p>
+                <p id="selectedCount" class="count-display">0 files selected</p>
             </div>
-            <div id="previewGrid" class="preview-grid" aria-live="polite">
-                </div>
+            <div id="previewGrid" class="preview-grid" aria-live="polite"></div>
         </section>
 
         <section class="panel">
             <div class="panel-header">
-                <h2>2) Configure Extraction</h2>
-                <span class="step-indicator">Step 2</span>
+                <h2>2) Choose Fields to Extract</h2>
+                <span class="badge">Step 2</span>
             </div>
-            <div class="config-grid">
-                <div class="checkbox-group">
-                    <label class="custom-checkbox">
-                        <input type="checkbox" class="field-checkbox" value="name" checked>
-                        <span class="box"></span> Name
-                    </label>
-                    <label class="custom-checkbox">
-                        <input type="checkbox" class="field-checkbox" value="mobile" checked>
-                        <span class="box"></span> Mobile Number (+91)
-                    </label>
-                    <label class="custom-checkbox">
-                        <input type="checkbox" class="field-checkbox" value="email" checked>
-                        <span class="box"></span> Email Address
-                    </label>
-                    <label class="custom-checkbox">
-                        <input type="checkbox" class="field-checkbox" value="upi" checked>
-                        <span class="box"></span> UPI ID
-                    </label>
-                </div>
+            <div class="field-grid">
+                <label class="checkbox-container">
+                    <input type="checkbox" class="field-checkbox" value="name" checked>
+                    <span class="checkmark"></span> Name
+                </label>
+                <label class="checkbox-container">
+                    <input type="checkbox" class="field-checkbox" value="mobile" checked>
+                    <span class="checkmark"></span> Mobile (+91)
+                </label>
+                <label class="checkbox-container">
+                    <input type="checkbox" class="field-checkbox" value="email" checked>
+                    <span class="checkmark"></span> Email
+                </label>
+                <label class="checkbox-container">
+                    <input type="checkbox" class="field-checkbox" value="upi" checked>
+                    <span class="checkmark"></span> UPI ID
+                </label>
             </div>
-            <button id="extractBtn" class="main-action-btn" type="button">Process All Screenshots</button>
+            <button id="extractBtn" class="primary-btn" type="button">Start Extraction Process</button>
         </section>
 
         <section class="panel">
             <div class="panel-header">
-                <h2>3) Results & Export</h2>
-                <span class="step-indicator">Step 3</span>
+                <h2>3) Results & Data Export</h2>
+                <span class="badge">Step 3</span>
             </div>
-            
-            <div id="status" class="live-status">Ready to begin...</div>
+            <div id="status" class="status-message" aria-live="polite">Ready to process...</div>
 
-            <div class="action-bar">
-                <button id="copyBtn" class="btn-secondary" type="button" disabled>Copy Full Table</button>
-                <button id="toggleDupesBtn" class="btn-success" type="button" disabled>Hide Duplicates</button>
-                <button id="copyNameBtn" class="btn-secondary" type="button" disabled>Copy Names</button>
-                <button id="copyMobileBtn" class="btn-secondary" type="button" disabled>Copy Mobiles</button>
-                <button id="copyEmailBtn" class="btn-secondary" type="button" disabled>Copy Emails</button>
-                <button id="copyUpiBtn" class="btn-secondary" type="button" disabled>Copy UPI IDs</button>
-            </div>
-
-            <div class="export-bar">
-                <button id="downloadCsvBtn" class="btn-download" type="button" disabled>Export to CSV</button>
-                <button id="downloadXlsxBtn" class="btn-download" type="button" disabled>Export to Excel (.xlsx)</button>
+            <div class="action-group">
+                <button id="copyBtn" class="action-btn" type="button" disabled>Copy All (Tabbed)</button>
+                <button id="toggleDupesBtn" class="action-btn toggle-btn" type="button" disabled>Hide Duplicates</button>
+                <button id="copyNameBtn" class="action-btn" type="button" disabled>Copy Names</button>
+                <button id="copyMobileBtn" class="action-btn" type="button" disabled>Copy Mobiles</button>
+                <button id="copyEmailBtn" class="action-btn" type="button" disabled>Copy Emails</button>
+                <button id="copyUpiBtn" class="action-btn" type="button" disabled>Copy UPIs</button>
             </div>
 
-            <div class="table-wrapper">
+            <div class="export-group">
+                <button id="downloadCsvBtn" class="secondary-btn" type="button" disabled>Download CSV</button>
+                <button id="downloadXlsxBtn" class="secondary-btn" type="button" disabled>Download Excel (.xlsx)</button>
+            </div>
+
+            <div class="table-container">
                 <table id="resultsTable">
                     <thead>
                         <tr>
                             <th>Status</th>
-                            <th>Image Source</th>
-                            <th>Contact Name</th>
-                            <th>Phone Number</th>
-                            <th>Email</th>
+                            <th>Source File</th>
+                            <th>Extracted Name</th>
+                            <th>Mobile Number</th>
+                            <th>Email Address</th>
                             <th>UPI ID</th>
                         </tr>
                     </thead>
@@ -99,13 +95,11 @@
         </section>
     </div>
 
-    <div id="imageModal" class="modal" hidden>
+    <div id="imageModal" class="image-modal" hidden>
         <div class="modal-overlay"></div>
-        <div class="modal-body">
-            <button id="closeModalBtn" class="close-btn">&times;</button>
-            <div class="modal-img-container">
-                <img id="modalImage" src="" alt="Full view">
-            </div>
+        <div class="modal-content">
+            <button id="closeModalBtn" class="modal-close" type="button" aria-label="Close">&times;</button>
+            <img id="modalImage" src="" alt="Full Preview">
             <p id="modalCaption" class="modal-caption"></p>
         </div>
     </div>
