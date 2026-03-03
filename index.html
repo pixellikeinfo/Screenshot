@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Screenshot Data Extractor</title>
+    <title>Screenshot Data Extractor PRO</title>
     <link rel="stylesheet" href="styles.css" />
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
@@ -14,14 +14,14 @@
       <header>
         <h1>Screenshot Data Extractor</h1>
         <p class="subtitle">
-          Upload one or many screenshots and extract name, mobile number, email, and UPI ID using free in-browser OCR.
+          Extract Name, Mobile (with +91 support), Email, and UPI ID. Duplicates are flagged but kept for safety.
         </p>
       </header>
 
       <section class="panel">
         <h2>1) Upload screenshots</h2>
         <input id="imageInput" type="file" accept="image/*" multiple />
-        <p class="hint">Tip: Higher quality screenshots give better extraction results.</p>
+        <p class="hint">Higher resolution screenshots yield better results (14+ numbers support enabled).</p>
         <p id="selectedCount" class="hint"></p>
         <div id="previewGrid" class="preview-grid" aria-live="polite"></div>
       </section>
@@ -43,7 +43,7 @@
 
         <div class="actions">
           <button id="copyBtn" type="button" disabled>Copy all columns (sheet format)</button>
-          <button id="toggleDupesBtn" type="button" disabled style="background-color: #10b981;">Hide Duplicates</button>
+          <button id="toggleDupesBtn" type="button" disabled style="background-color: #10b981;">Toggle Duplicates</button>
           <button id="copyNameBtn" type="button" disabled>Copy Name column</button>
           <button id="copyMobileBtn" type="button" disabled>Copy Mobile column</button>
           <button id="copyEmailBtn" type="button" disabled>Copy Email column</button>
