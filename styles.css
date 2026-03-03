@@ -102,6 +102,7 @@ header h1 {
   border: 1px solid #fff;
   line-height: 1;
   font-size: 14px;
+  z-index: 5;
 }
 
 .preview-remove-btn:hover {
@@ -192,7 +193,6 @@ th {
   background: #111827;
   border: 1px solid #fff;
 }
-
 
 .image-modal[hidden] {
   display: none !important;
