@@ -1,13 +1,23 @@
 const imageInput = document.getElementById('imageInput');
 const extractBtn = document.getElementById('extractBtn');
 const copyBtn = document.getElementById('copyBtn');
+const copyNameBtn = document.getElementById('copyNameBtn');
+const copyMobileBtn = document.getElementById('copyMobileBtn');
+const copyEmailBtn = document.getElementById('copyEmailBtn');
+const copyUpiBtn = document.getElementById('copyUpiBtn');
 const downloadCsvBtn = document.getElementById('downloadCsvBtn');
 const downloadXlsxBtn = document.getElementById('downloadXlsxBtn');
 const statusEl = document.getElementById('status');
 const tableBody = document.querySelector('#resultsTable tbody');
+const previewGrid = document.getElementById('previewGrid');
+const imageModal = document.getElementById('imageModal');
+const modalImage = document.getElementById('modalImage');
+const modalCaption = document.getElementById('modalCaption');
+const closeModalBtn = document.getElementById('closeModalBtn');
 
 const headers = ['File', 'Name', 'Mobile', 'Email', 'UPI ID'];
 let extractedRows = [];
+let previewUrls = [];
 
 function selectedFields() {
   return Array.from(document.querySelectorAll('.field-checkbox:checked')).map((item) => item.value);
@@ -159,8 +169,16 @@ function downloadFile(content, fileName, mimeType) {
   URL.revokeObjectURL(url);
 }
 
+function getOrderedRows() {
+  return extractedRows.map(objectToOrderedRow);
+}
+
 function enableActions(enabled) {
   copyBtn.disabled = !enabled;
+  copyNameBtn.disabled = !enabled;
+  copyMobileBtn.disabled = !enabled;
+  copyEmailBtn.disabled = !enabled;
+  copyUpiBtn.disabled = !enabled;
   downloadCsvBtn.disabled = !enabled;
   downloadXlsxBtn.disabled = !enabled;
 }
@@ -173,6 +191,55 @@ function applyFieldSelection(record, fields) {
     email: fields.includes('email') ? record.email : '',
     upi: fields.includes('upi') ? record.upi : '',
   };
+}
+
+function clearPreviews() {
+  previewUrls.forEach((url) => URL.revokeObjectURL(url));
+  previewUrls = [];
+  previewGrid.innerHTML = '';
+}
+
+function renderPreviews(files) {
+  clearPreviews();
+
+  files.forEach((file) => {
+    const url = URL.createObjectURL(file);
+    previewUrls.push(url);
+
+    const card = document.createElement('button');
+    card.type = 'button';
+    card.className = 'preview-card';
+
+    const img = document.createElement('img');
+    img.src = url;
+    img.alt = file.name;
+
+    const name = document.createElement('span');
+    name.className = 'preview-name';
+    name.textContent = file.name;
+
+    card.appendChild(img);
+    card.appendChild(name);
+    card.addEventListener('click', () => {
+      modalImage.src = url;
+      modalCaption.textContent = file.name;
+      imageModal.hidden = false;
+    });
+
+    previewGrid.appendChild(card);
+  });
+}
+
+function copyColumn(headerKey, label) {
+  const rows = getOrderedRows();
+  const values = rows.map((row) => row[headerKey] || '').join('\n');
+  navigator.clipboard
+    .writeText(values)
+    .then(() => showStatus(`Copied ${label} column.`))
+    .catch((error) => {
+      console.error(error);
+      showStatus('Copy failed. Your browser may block clipboard permission.', true);
+    });
 }
 
 async function runOCR(file) {
@@ -216,6 +283,21 @@ async function runOCR(file) {
   });
 }
 
+imageInput.addEventListener('change', () => {
+  const files = Array.from(imageInput.files || []);
+  renderPreviews(files);
+});
+
+closeModalBtn.addEventListener('click', () => {
+  imageModal.hidden = true;
+});
+
+imageModal.addEventListener('click', (event) => {
+  if (event.target === imageModal) {
+    imageModal.hidden = true;
+  }
+});
+
 extractBtn.addEventListener('click', async () => {
   const files = Array.from(imageInput.files || []);
   const fields = selectedFields();
@@ -244,7 +326,7 @@ extractBtn.addEventListener('click', async () => {
         .forEach((result) => extractedRows.push(applyFieldSelection(result, fields)));
     }
 
-    const orderedRows = extractedRows.map(objectToOrderedRow);
+    const orderedRows = getOrderedRows();
     renderTable(orderedRows);
     enableActions(orderedRows.length > 0);
     const mobileCount = orderedRows.filter((row) => row.Mobile).length;
@@ -258,26 +340,31 @@ extractBtn.addEventListener('click', async () => {
 });
 
 copyBtn.addEventListener('click', async () => {
-  const orderedRows = extractedRows.map(objectToOrderedRow);
+  const orderedRows = getOrderedRows();
   if (!orderedRows.length) return;
 
   try {
     await navigator.clipboard.writeText(toTSV(orderedRows));
-    showStatus('Copied tabular data. Paste directly into Google Sheets or Excel.');
+    showStatus('Copied all columns in sheet-friendly format. Paste into Google Sheets or Excel.');
   } catch (error) {
     console.error(error);
     showStatus('Copy failed. Your browser may block clipboard permission.', true);
   }
 });
 
+copyNameBtn.addEventListener('click', () => copyColumn('Name', 'Name'));
+copyMobileBtn.addEventListener('click', () => copyColumn('Mobile', 'Mobile'));
+copyEmailBtn.addEventListener('click', () => copyColumn('Email', 'Email'));
+copyUpiBtn.addEventListener('click', () => copyColumn('UPI ID', 'UPI ID'));
+
 downloadCsvBtn.addEventListener('click', () => {
-  const orderedRows = extractedRows.map(objectToOrderedRow);
+  const orderedRows = getOrderedRows();
   if (!orderedRows.length) return;
   downloadFile(toCSV(orderedRows), 'extracted_data.csv', 'text/csv;charset=utf-8');
 });
 
 downloadXlsxBtn.addEventListener('click', () => {
-  const orderedRows = extractedRows.map(objectToOrderedRow);
+  const orderedRows = getOrderedRows();
   if (!orderedRows.length) return;
 
   const worksheet = XLSX.utils.json_to_sheet(orderedRows, { header: headers });
