@@ -207,7 +207,7 @@
     <h2>🔑 Gemini API Key</h2>
     <p class="hint">
       Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>
-      &nbsp;·&nbsp; Select model <strong>Gemini 1.5 Flash</strong> &nbsp;·&nbsp; 1,500 images/day free
+      &nbsp;·&nbsp; Uses <strong>Gemini 2.0 Flash</strong> &nbsp;·&nbsp; 1,500 images/day free
       &nbsp;·&nbsp; Key saved in your browser only, never shared.
     </p>
     <div class="api-key-row">
@@ -398,7 +398,7 @@ Rules:
 - If nothing found, return []`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
     const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
