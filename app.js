@@ -42,7 +42,11 @@ function normalizeIndianMobile(rawValue) {
 }
 
 function extractMobiles(text) {
-  const normalizedText = text.replace(/[oO]/g, '0').replace(/[lI|]/g, '1');
+  const normalizedText = text
+    .replace(/[oO]/g, '0')
+    .replace(/[lI|]/g, '1')
+    .replace(/[sS]/g, '5')
+    .replace(/[bB]/g, '8');
   const uniqueNumbers = new Set();
 
   const addMobile = (value) => {
@@ -68,6 +72,33 @@ function extractMobiles(text) {
   return Array.from(uniqueNumbers);
 }
 
+function normalizeNameText(value) {
+  return cleanText(
+    value
+      .replace(/[|]/g, 'I')
+      .replace(/[0]/g, 'O')
+      .replace(/\bmobile\b/gi, '')
+      .replace(/\badd\b/gi, '')
+      .replace(/\bview contacts\b/gi, '')
+      .replace(/[^a-zA-Z0-9\s.'-]/g, ' ')
+  );
+}
+
+function isLikelyName(value) {
+  if (!value) return false;
+  if (value.length < 3 || value.length > 60) return false;
+  if (/[@:]/.test(value)) return false;
+  if (value.toLowerCase().includes('upi')) return false;
+
+  const letters = (value.match(/[a-zA-Z]/g) || []).length;
+  const digits = (value.match(/\d/g) || []).length;
+
+  if (letters < 2) return false;
+  if (digits > 0 && digits > Math.ceil(letters / 2)) return false;
+
+  return true;
+}
+
 function extractUPI(text) {
   return cleanText((text.match(/\b[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}\b/) || [])[0]);
 }
@@ -75,33 +106,28 @@ function extractUPI(text) {
 function extractName(text, foundValues) {
   const lines = text
     .split(/\r?\n/)
-    .map((line) => line.trim())
+    .map((line) => normalizeNameText(line))
     .filter(Boolean);
 
   for (const line of lines) {
-    if (line.length < 3 || line.length > 60) continue;
-    if (/\d/.test(line)) continue;
-    if (/[@:]/.test(line)) continue;
-    if (line.toLowerCase().includes('upi')) continue;
+    if (!isLikelyName(line)) continue;
     if (Object.values(foundValues).some((value) => value && line.includes(value))) continue;
-    return cleanText(line);
+    return line;
   }
   return '';
 }
 
 function extractNameForMobileLine(lines, lineIndex) {
-  const currentLine = cleanText(lines[lineIndex] || '');
-  const withoutNumbers = cleanText(currentLine.replace(/(?:\+?91[\s().,-]*)?[6-9](?:[\s().,-]*\d){9}/g, ''));
+  const currentLine = normalizeNameText(lines[lineIndex] || '');
+  const withoutNumbers = normalizeNameText(currentLine.replace(/(?:\+?91[\s().,-]*)?[6-9](?:[\s().,-]*\d){9}/g, ''));
 
-  if (withoutNumbers && !/\d/.test(withoutNumbers) && !/[@:]/.test(withoutNumbers)) {
+  if (isLikelyName(withoutNumbers)) {
     return withoutNumbers;
   }
 
-  for (let offset = 1; offset <= 2; offset += 1) {
-    const prev = cleanText(lines[lineIndex - offset] || '');
-    if (!prev) continue;
-    if (prev.length < 3 || prev.length > 60) continue;
-    if (/\d/.test(prev) || /[@:]/.test(prev) || prev.toLowerCase().includes('upi')) continue;
+  for (let offset = 1; offset <= 3; offset += 1) {
+    const prev = normalizeNameText(lines[lineIndex - offset] || '');
+    if (!isLikelyName(prev)) continue;
     return prev;
   }
 
@@ -280,6 +306,40 @@ function closePreviewModal() {
   modalCaption.textContent = '';
 }
 
+async function preprocessImageForOCR(file) {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width * 2;
+    canvas.height = bitmap.height * 2;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imageData.data;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const gray = 0.2126 * data[i] + 0.7152 * data[i + 1] + 0.0722 * data[i + 2];
+      const value = gray > 145 ? 255 : 0;
+      data[i] = value;
+      data[i + 1] = value;
+      data[i + 2] = value;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    return await new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), 'image/png');
+    });
+  } catch (error) {
+    console.error('Image preprocessing failed:', error);
+    return null;
+  }
+}
+
 function copyColumn(headerKey, label) {
   const rows = getOrderedRows();
   const values = rows.map((row) => row[headerKey] || '').join('\n');
@@ -294,18 +354,33 @@ function copyColumn(headerKey, label) {
 
 async function runOCR(file) {
   const {
-    data: { text },
+    data: { text: primaryText },
   } = await Tesseract.recognize(file, 'eng');
 
-  const email = extractEmail(text);
-  const upi = extractUPI(text);
-  const lines = text
+  let processedText = '';
+  const processedBlob = await preprocessImageForOCR(file);
+  if (processedBlob) {
+    try {
+      const {
+        data: { text },
+      } = await Tesseract.recognize(processedBlob, 'eng');
+      processedText = text;
+    } catch (error) {
+      console.error('Second OCR pass failed:', error);
+    }
+  }
+
+  const mergedText = `${primaryText}\n${processedText}`;
+  const email = extractEmail(mergedText);
+  const upi = extractUPI(mergedText);
+
+  const linePool = mergedText
     .split(/\r?\n/)
     .map((line) => line.trim())
     .filter(Boolean);
 
-  const mobiles = extractMobiles(text);
-  const fallbackName = extractName(text, { email, upi });
+  const mobiles = extractMobiles(mergedText);
+  const fallbackName = extractName(mergedText, { email, upi });
 
   if (!mobiles.length) {
     return [
@@ -320,8 +395,8 @@ async function runOCR(file) {
   }
 
   return mobiles.map((mobile) => {
-    const lineIndex = lines.findIndex((line) => extractMobiles(line).includes(mobile));
-    const mappedName = lineIndex >= 0 ? extractNameForMobileLine(lines, lineIndex) : '';
+    const lineIndex = linePool.findIndex((line) => extractMobiles(line).includes(mobile));
+    const mappedName = lineIndex >= 0 ? extractNameForMobileLine(linePool, lineIndex) : '';
 
     return {
       file: file.name,
