@@ -1,0 +1,613 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Screenshot Data Extractor</title>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <style>
+    :root { font-family: 'Segoe UI', Arial, sans-serif; color-scheme: light; }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #f0f4ff; color: #1e293b; }
+
+    .app-shell { max-width: 1000px; margin: 0 auto; padding: 24px 16px; }
+
+    header { margin-bottom: 20px; }
+    header h1 {
+      font-size: 1.8rem; font-weight: 800; color: #1e3a5f;
+      margin: 0 0 6px; letter-spacing: -0.5px;
+    }
+    .subtitle { margin: 0; color: #4f6080; font-size: 0.95rem; }
+
+    .panel {
+      background: #fff;
+      border: 1px solid #dbe3ef;
+      border-radius: 14px;
+      padding: 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 2px 12px rgb(30 60 120 / 7%);
+    }
+    .panel h2 {
+      margin: 0 0 12px;
+      font-size: 1.05rem;
+      color: #1e3a5f;
+      font-weight: 700;
+    }
+
+    /* API Key */
+    .api-key-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
+    .api-key-row input {
+      flex: 1; min-width: 260px;
+      padding: 10px 14px;
+      border: 1.5px solid #cbd5e1;
+      border-radius: 8px;
+      font-size: 0.95rem;
+      font-family: monospace;
+      outline: none;
+      transition: border-color .2s;
+    }
+    .api-key-row input:focus { border-color: #2563eb; }
+    #apiKeyStatus { margin: 8px 0 0; font-size: 0.9rem; min-height: 20px; }
+
+    /* File input */
+    #imageInput { display: none; }
+    .upload-label {
+      display: inline-flex; align-items: center; gap: 8px;
+      background: #2563eb; color: #fff;
+      padding: 10px 20px; border-radius: 10px;
+      cursor: pointer; font-weight: 600; font-size: 0.95rem;
+      transition: background .15s;
+    }
+    .upload-label:hover { background: #1d4ed8; }
+    .hint { color: #64748b; font-size: 0.88rem; margin: 8px 0 0; }
+    #selectedCount { color: #2563eb; font-size: 0.9rem; font-weight: 600; margin: 6px 0 0; }
+
+    /* Preview grid */
+    .preview-grid {
+      margin-top: 14px;
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
+      gap: 10px;
+    }
+    .preview-card {
+      position: relative;
+      border: 1.5px solid #dbe3ef;
+      border-radius: 10px;
+      padding: 6px;
+      background: #f8fbff;
+    }
+    .preview-open-btn {
+      display: block; width: 100%; padding: 0;
+      background: transparent; border: 0;
+      cursor: pointer; text-align: left;
+    }
+    .preview-card img {
+      width: 100%; height: 76px;
+      object-fit: cover; border-radius: 6px; display: block;
+    }
+    .preview-name {
+      display: block; margin-top: 5px;
+      font-size: 11px; color: #475569;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .preview-remove-btn {
+      position: absolute; top: 4px; right: 4px;
+      width: 22px; height: 22px;
+      border-radius: 50%; padding: 0;
+      background: rgba(15,23,42,.85); color: #fff;
+      border: 1px solid #fff; font-size: 13px;
+      cursor: pointer; line-height: 1;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .preview-remove-btn:hover { background: #b91c1c; }
+
+    /* Fields */
+    .field-grid {
+      display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px;
+    }
+    .field-grid label {
+      display: flex; align-items: center; gap: 6px;
+      font-size: 0.95rem; font-weight: 500; cursor: pointer;
+    }
+
+    /* Buttons */
+    button {
+      border: none; border-radius: 10px;
+      padding: 10px 16px; cursor: pointer;
+      background: #2563eb; color: #fff;
+      font-weight: 600; font-size: 0.9rem;
+      transition: background .15s, opacity .15s;
+    }
+    button:hover:not(:disabled) { background: #1d4ed8; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
+    .btn-secondary { background: #64748b; }
+    .btn-secondary:hover:not(:disabled) { background: #475569; }
+    .btn-dup { background: #7c3aed; }
+    .btn-dup:hover:not(:disabled) { background: #6d28d9; }
+    #extractBtn {
+      background: linear-gradient(135deg, #2563eb, #7c3aed);
+      padding: 12px 28px; font-size: 1rem;
+      box-shadow: 0 4px 14px rgb(37 99 235 / 30%);
+    }
+    #extractBtn:hover:not(:disabled) {
+      background: linear-gradient(135deg, #1d4ed8, #6d28d9);
+    }
+
+    .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+
+    /* Status */
+    .status { min-height: 22px; font-size: 0.93rem; margin-bottom: 10px; font-weight: 500; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid #dbe3ef; }
+    table { width: 100%; border-collapse: collapse; min-width: 700px; }
+    th, td { border-bottom: 1px solid #e2e8f0; text-align: left; padding: 10px 12px; font-size: 0.9rem; }
+    th { background: #eff6ff; font-weight: 700; color: #1e3a5f; border-bottom: 2px solid #bfdbfe; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #f8faff; }
+    tr.dup-row td { background: #fff7ed; }
+    tr.dup-row td:nth-child(3) { font-weight: 700; color: #c2410c; }
+
+    /* Image modal */
+    .image-modal {
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,.8);
+      display: flex; flex-direction: column;
+      justify-content: center; align-items: center;
+      padding: 16px; z-index: 100;
+    }
+    .image-modal[hidden] { display: none !important; }
+    .image-modal img { max-width: min(100%,900px); max-height: 80vh; border-radius: 10px; border: 2px solid #fff; }
+    #modalCaption { color: #fff; margin-top: 10px; font-size: 0.9rem; }
+    .modal-close {
+      position: absolute; top: 18px; right: 18px;
+      width: 40px; height: 40px; border-radius: 50%;
+      background: #111827; border: 2px solid #fff;
+      color: #fff; font-size: 20px; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+    }
+
+    /* Dup modal */
+    .dup-modal { justify-content: center; align-items: center; }
+    .dup-modal-box {
+      background: #fff; border-radius: 14px;
+      width: min(640px, 94vw); max-height: 80vh;
+      display: flex; flex-direction: column; overflow: hidden;
+      box-shadow: 0 20px 60px rgba(0,0,0,.4);
+    }
+    .dup-modal-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid #dbe3ef; background: #eff6ff;
+    }
+    .dup-modal-header h3 { margin: 0; font-size: 1.05rem; color: #1e3a5f; }
+    .modal-close-inline {
+      background: transparent; border: none; color: #334155;
+      font-size: 22px; padding: 0 4px; cursor: pointer; line-height: 1;
+    }
+    .modal-close-inline:hover { color: #b91c1c; }
+    .dup-modal-body { padding: 16px 20px; overflow-y: auto; }
+    .no-dup { color: #16a34a; font-weight: 600; }
+    .dup-count { color: #92400e; font-weight: 600; margin-bottom: 12px; }
+    .dup-table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    .dup-table th, .dup-table td { border: 1px solid #dbe3ef; padding: 8px 10px; text-align: left; }
+    .dup-table th { background: #eff6ff; font-weight: 700; }
+    .dup-table td:first-child { font-weight: 700; color: #c2410c; }
+  </style>
+</head>
+<body>
+<main class="app-shell">
+
+  <header>
+    <h1>📋 Screenshot Data Extractor</h1>
+    <p class="subtitle">Extract contacts from WhatsApp screenshots using Google Gemini AI — 1,500 images/day free.</p>
+  </header>
+
+  <!-- API Key -->
+  <section class="panel">
+    <h2>🔑 Gemini API Key</h2>
+    <p class="hint">
+      Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>
+      &nbsp;·&nbsp; Select model <strong>Gemini 1.5 Flash</strong> &nbsp;·&nbsp; 1,500 images/day free
+      &nbsp;·&nbsp; Key saved in your browser only, never shared.
+    </p>
+    <div class="api-key-row">
+      <input id="apiKeyInput" type="password" placeholder="Paste your Gemini API key here  (AIzaSy...)" autocomplete="off" />
+      <button id="saveKeyBtn">Save Key</button>
+      <button id="clearKeyBtn" class="btn-secondary">Clear</button>
+    </div>
+    <p id="apiKeyStatus"></p>
+  </section>
+
+  <!-- Upload -->
+  <section class="panel">
+    <h2>1) Upload Screenshots</h2>
+    <label class="upload-label" for="imageInput">📁 Choose Files</label>
+    <input id="imageInput" type="file" accept="image/*" multiple />
+    <p class="hint">You can select multiple screenshots at once.</p>
+    <p id="selectedCount"></p>
+    <div id="previewGrid" class="preview-grid"></div>
+  </section>
+
+  <!-- Fields -->
+  <section class="panel">
+    <h2>2) Choose Fields to Extract</h2>
+    <div class="field-grid">
+      <label><input type="checkbox" class="field-checkbox" value="name"   checked /> Name</label>
+      <label><input type="checkbox" class="field-checkbox" value="mobile" checked /> Mobile</label>
+      <label><input type="checkbox" class="field-checkbox" value="email"  checked /> Email</label>
+      <label><input type="checkbox" class="field-checkbox" value="upi"    checked /> UPI ID</label>
+    </div>
+    <button id="extractBtn">⚡ Extract from Screenshots</button>
+  </section>
+
+  <!-- Results -->
+  <section class="panel">
+    <h2>3) Results</h2>
+    <div id="status" class="status"></div>
+    <div class="actions">
+      <button id="copyBtn"       disabled>Copy All (Sheet Format)</button>
+      <button id="copyNameBtn"   disabled>Copy Names</button>
+      <button id="copyMobileBtn" disabled>Copy Mobiles</button>
+      <button id="copyEmailBtn"  disabled>Copy Emails</button>
+      <button id="copyUpiBtn"    disabled>Copy UPI IDs</button>
+    </div>
+    <div class="actions">
+      <button id="downloadCsvBtn"  disabled>⬇ Download CSV</button>
+      <button id="downloadXlsxBtn" disabled>⬇ Download Excel (.xlsx)</button>
+      <button id="checkDupBtn"     disabled class="btn-dup">🔍 Check Duplicates</button>
+    </div>
+    <div class="table-wrap">
+      <table id="resultsTable">
+        <thead>
+          <tr><th>File</th><th>Name</th><th>Mobile</th><th>Email</th><th>UPI ID</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<!-- Image preview modal -->
+<div id="imageModal" class="image-modal" hidden>
+  <button id="closeModalBtn" class="modal-close" aria-label="Close">✕</button>
+  <img id="modalImage" alt="Preview" />
+  <p id="modalCaption"></p>
+</div>
+
+<!-- Duplicate modal -->
+<div id="dupModal" class="image-modal dup-modal" hidden>
+  <div class="dup-modal-box">
+    <div class="dup-modal-header">
+      <h3>Duplicate Mobile Numbers</h3>
+      <button id="closeDupModalBtn" class="modal-close-inline">✕</button>
+    </div>
+    <div id="dupModalBody" class="dup-modal-body"></div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+/* ═══════════════════════════════════════════════════
+   APP.JS — embedded
+   ═══════════════════════════════════════════════════ */
+
+/* DOM refs */
+const imageInput       = document.getElementById('imageInput');
+const extractBtn       = document.getElementById('extractBtn');
+const copyBtn          = document.getElementById('copyBtn');
+const copyNameBtn      = document.getElementById('copyNameBtn');
+const copyMobileBtn    = document.getElementById('copyMobileBtn');
+const copyEmailBtn     = document.getElementById('copyEmailBtn');
+const copyUpiBtn       = document.getElementById('copyUpiBtn');
+const downloadCsvBtn   = document.getElementById('downloadCsvBtn');
+const downloadXlsxBtn  = document.getElementById('downloadXlsxBtn');
+const checkDupBtn      = document.getElementById('checkDupBtn');
+const statusEl         = document.getElementById('status');
+const tableBody        = document.querySelector('#resultsTable tbody');
+const previewGrid      = document.getElementById('previewGrid');
+const imageModal       = document.getElementById('imageModal');
+const modalImage       = document.getElementById('modalImage');
+const modalCaption     = document.getElementById('modalCaption');
+const closeModalBtn    = document.getElementById('closeModalBtn');
+const selectedCountEl  = document.getElementById('selectedCount');
+const dupModal         = document.getElementById('dupModal');
+const dupModalBody     = document.getElementById('dupModalBody');
+const closeDupModalBtn = document.getElementById('closeDupModalBtn');
+const apiKeyInput      = document.getElementById('apiKeyInput');
+const saveKeyBtn       = document.getElementById('saveKeyBtn');
+const clearKeyBtn      = document.getElementById('clearKeyBtn');
+const apiKeyStatus     = document.getElementById('apiKeyStatus');
+
+const HEADERS = ['File','Name','Mobile','Email','UPI ID'];
+let extractedRows = [], previewUrls = [], selectedFiles = [];
+
+/* ── API Key ── */
+function getApiKey() {
+  return localStorage.getItem('gemini_api_key') || apiKeyInput.value.trim();
+}
+(function() {
+  const k = localStorage.getItem('gemini_api_key');
+  if (k) { apiKeyInput.value = k; setKeyStatus('✅ API key loaded.', 'green'); }
+})();
+function setKeyStatus(msg, color) {
+  apiKeyStatus.textContent = msg; apiKeyStatus.style.color = color;
+}
+saveKeyBtn.addEventListener('click', () => {
+  const k = apiKeyInput.value.trim();
+  if (!k.startsWith('AIza')) { setKeyStatus('❌ Invalid key — must start with "AIza"', '#b91c1c'); return; }
+  localStorage.setItem('gemini_api_key', k);
+  setKeyStatus('✅ Key saved in your browser. Never shared.', 'green');
+});
+clearKeyBtn.addEventListener('click', () => {
+  localStorage.removeItem('gemini_api_key');
+  apiKeyInput.value = '';
+  setKeyStatus('Key cleared.', '#64748b');
+});
+
+/* ── Helpers ── */
+function cleanStr(v) { return (v||'').replace(/\s+/g,' ').trim(); }
+function showStatus(msg, isError=false) {
+  statusEl.textContent = msg;
+  statusEl.style.color = isError ? '#b91c1c' : '#16a34a';
+}
+function enableActions(on) {
+  [copyBtn,copyNameBtn,copyMobileBtn,copyEmailBtn,copyUpiBtn,
+   downloadCsvBtn,downloadXlsxBtn,checkDupBtn].forEach(b => b.disabled = !on);
+}
+
+/* ── Gemini API ── */
+async function fileToBase64(file) {
+  return new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload  = () => res(r.result.split(',')[1]);
+    r.onerror = () => rej(new Error('File read failed'));
+    r.readAsDataURL(file);
+  });
+}
+
+async function runOCR(file) {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    showStatus('⚠️ Please enter your Gemini API key and click Save.', true);
+    return [{ file: file.name, name:'', mobile:'', email:'', upi:'' }];
+  }
+
+  const base64   = await fileToBase64(file);
+  const mimeType = file.type || 'image/jpeg';
+
+  const prompt = `Look at this screenshot carefully. It shows a list of contacts or phone numbers.
+
+Your job:
+1. Find EVERY phone number visible — read each digit EXACTLY as shown on screen.
+2. For each number, find the associated name (shown just above or beside it). If no name, leave blank.
+3. Extract any email or UPI ID if visible.
+
+Return ONLY a raw JSON array — no explanation, no markdown, no code fences:
+[
+  {"name": "Jeevan bose33", "mobile": "+917907425814", "email": "", "upi": ""},
+  {"name": "", "mobile": "+919746768963", "email": "", "upi": ""}
+]
+
+Rules:
+- Copy each number EXACTLY as shown, including country code (+91, +971 etc.)
+- Remove spaces within the number, keep the + sign
+- If no country code shown, write number as-is
+- Do NOT change or guess any digit
+- Copy names exactly as shown
+- If nothing found, return []`;
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [
+          { inline_data: { mime_type: mimeType, data: base64 } },
+          { text: prompt }
+        ]}],
+        generationConfig: { temperature: 0, maxOutputTokens: 2048 }
+      })
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error?.message || 'Gemini API error');
+
+    const raw   = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    const clean = raw.replace(/```json|```/g,'').trim();
+    const parsed = JSON.parse(clean);
+
+    if (!Array.isArray(parsed) || !parsed.length)
+      return [{ file: file.name, name:'', mobile:'', email:'', upi:'' }];
+
+    return parsed.map(r => ({
+      file:   file.name,
+      name:   cleanStr(r.name   || ''),
+      mobile: cleanStr(r.mobile || ''),
+      email:  cleanStr(r.email  || ''),
+      upi:    cleanStr(r.upi    || ''),
+    }));
+  } catch(err) {
+    console.error('Gemini error:', err);
+    showStatus(`❌ Error: ${err.message}`, true);
+    return [{ file: file.name, name:'', mobile:'', email:'', upi:'' }];
+  }
+}
+
+/* ── Table / Export ── */
+function selectedFields() {
+  return Array.from(document.querySelectorAll('.field-checkbox:checked')).map(e => e.value);
+}
+function toRow(d) {
+  return { File:cleanStr(d.file), Name:cleanStr(d.name), Mobile:cleanStr(d.mobile), Email:cleanStr(d.email), 'UPI ID':cleanStr(d.upi) };
+}
+function applyFields(r, fields) {
+  return {
+    file:   r.file,
+    name:   fields.includes('name')   ? r.name   : '',
+    mobile: fields.includes('mobile') ? r.mobile : '',
+    email:  fields.includes('email')  ? r.email  : '',
+    upi:    fields.includes('upi')    ? r.upi    : '',
+  };
+}
+function getRows() { return extractedRows.map(toRow); }
+
+function getDups(rows) {
+  const c = {};
+  rows.forEach(r => { if(r.Mobile) c[r.Mobile] = (c[r.Mobile]||0)+1; });
+  return new Set(Object.keys(c).filter(k => c[k]>1));
+}
+
+function renderTable(rows) {
+  tableBody.innerHTML = '';
+  const dups = getDups(rows);
+  rows.forEach(row => {
+    const tr = document.createElement('tr');
+    if (row.Mobile && dups.has(row.Mobile)) tr.classList.add('dup-row');
+    HEADERS.forEach(k => {
+      const td = document.createElement('td');
+      td.textContent = row[k] || '';
+      tr.appendChild(td);
+    });
+    tableBody.appendChild(tr);
+  });
+}
+
+function toTSV(rows) {
+  const e = v => (v??'').toString().replace(/\t/g,' ').replace(/\n/g,' ');
+  return [HEADERS.join('\t'), ...rows.map(r => HEADERS.map(k=>e(r[k])).join('\t'))].join('\n');
+}
+function toCSV(rows) {
+  const e = v => { const s=(v??'').toString(); return /[",\n]/.test(s)?`"${s.replace(/"/g,'""')}"`  :s; };
+  return [HEADERS.join(','), ...rows.map(r => HEADERS.map(k=>e(r[k])).join(','))].join('\n');
+}
+function dlFile(content, name, mime) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content],{type:mime}));
+  a.download = name; a.click();
+}
+function copyCol(key, label) {
+  navigator.clipboard.writeText(getRows().map(r=>r[key]||'').join('\n'))
+    .then(()=>showStatus(`Copied ${label} column.`))
+    .catch(()=>showStatus('Copy failed.',true));
+}
+
+/* ── File previews ── */
+function fkey(f) { return `${f.name}__${f.size}__${f.lastModified}`; }
+function updateCount() {
+  selectedCountEl.textContent = selectedFiles.length ? `${selectedFiles.length} file(s) selected.` : '';
+}
+function addFiles(files) {
+  const seen = new Set(selectedFiles.map(fkey));
+  files.forEach(f => { const k=fkey(f); if(!seen.has(k)){selectedFiles.push(f);seen.add(k);} });
+}
+function removeFile(target) {
+  selectedFiles = selectedFiles.filter(f => fkey(f)!==fkey(target));
+  renderPreviews(); updateCount();
+}
+function clearPreviews() {
+  previewUrls.forEach(u=>URL.revokeObjectURL(u));
+  previewUrls=[]; previewGrid.innerHTML='';
+}
+function renderPreviews() {
+  clearPreviews();
+  selectedFiles.forEach(file => {
+    const url = URL.createObjectURL(file); previewUrls.push(url);
+    const card = document.createElement('div'); card.className='preview-card';
+    const rem  = document.createElement('button'); rem.type='button'; rem.className='preview-remove-btn'; rem.textContent='✕';
+    rem.setAttribute('aria-label',`Remove ${file.name}`);
+    rem.addEventListener('click', e=>{e.stopPropagation();removeFile(file);});
+    const btn = document.createElement('button'); btn.type='button'; btn.className='preview-open-btn';
+    btn.addEventListener('click',()=>{ modalImage.src=url; modalCaption.textContent=file.name; imageModal.hidden=false; });
+    const img  = document.createElement('img'); img.src=url; img.alt=file.name;
+    const span = document.createElement('span'); span.className='preview-name'; span.textContent=file.name;
+    btn.appendChild(img); btn.appendChild(span);
+    card.appendChild(rem); card.appendChild(btn); previewGrid.appendChild(card);
+  });
+}
+
+/* ── Duplicate modal ── */
+function showDups() {
+  const rows = getRows(), dups = getDups(rows);
+  if (!dups.size) {
+    dupModalBody.innerHTML='<p class="no-dup">✅ No duplicate mobile numbers found.</p>';
+  } else {
+    let h=`<p class="dup-count">${dups.size} duplicate(s) found:</p>
+      <table class="dup-table"><thead><tr><th>Mobile</th><th>Count</th><th>Names</th></tr></thead><tbody>`;
+    dups.forEach(m => {
+      const match = rows.filter(r=>r.Mobile===m);
+      const names = [...new Set(match.map(r=>r.Name).filter(Boolean))].join(', ');
+      h+=`<tr><td>${m}</td><td>${match.length}</td><td>${names||'—'}</td></tr>`;
+    });
+    h+='</tbody></table>';
+    dupModalBody.innerHTML=h;
+  }
+  dupModal.hidden=false;
+}
+
+/* ── Events ── */
+imageInput.addEventListener('change', ()=>{
+  addFiles(Array.from(imageInput.files||[]));
+  renderPreviews(); updateCount(); imageInput.value='';
+});
+
+closeModalBtn.addEventListener('click', ()=>{ imageModal.hidden=true; });
+imageModal.addEventListener('click', e=>{ if(e.target===imageModal) imageModal.hidden=true; });
+closeDupModalBtn.addEventListener('click', ()=>{ dupModal.hidden=true; });
+dupModal.addEventListener('click', e=>{ if(e.target===dupModal) dupModal.hidden=true; });
+document.addEventListener('keydown', e=>{
+  if(e.key==='Escape'){ imageModal.hidden=true; dupModal.hidden=true; }
+});
+
+extractBtn.addEventListener('click', async ()=>{
+  const files=selectedFiles, fields=selectedFields();
+  if(!files.length){ showStatus('Please upload at least one screenshot.',true); return; }
+  if(!fields.length){ showStatus('Please select at least one field.',true); return; }
+
+  extractBtn.disabled=true; enableActions(false); extractedRows=[]; renderTable([]);
+
+  try {
+    for(let i=0;i<files.length;i++){
+      showStatus(`Processing ${i+1}/${files.length}: ${files[i].name} …`);
+      const results = await runOCR(files[i]);
+      results
+        .filter(r => !fields.includes('mobile') || r.mobile)
+        .forEach(r => extractedRows.push(applyFields(r, fields)));
+    }
+    const rows = getRows();
+    renderTable(rows); enableActions(rows.length>0);
+    const mc   = rows.filter(r=>r.Mobile).length;
+    const dups = getDups(rows);
+    const dm   = dups.size ? `  ⚠️ ${dups.size} duplicate(s) found.` : '';
+    showStatus(`✅ Done. ${rows.length} row(s) · ${mc} mobile number(s).${dm}`);
+  } catch(err){
+    console.error(err); showStatus('Extraction failed.',true);
+  } finally { extractBtn.disabled=false; }
+});
+
+copyBtn.addEventListener('click', async ()=>{
+  const rows=getRows(); if(!rows.length) return;
+  await navigator.clipboard.writeText(toTSV(rows));
+  showStatus('Copied. Paste into Google Sheets or Excel.');
+});
+copyNameBtn.addEventListener('click',   ()=>copyCol('Name','Name'));
+copyMobileBtn.addEventListener('click', ()=>copyCol('Mobile','Mobile'));
+copyEmailBtn.addEventListener('click',  ()=>copyCol('Email','Email'));
+copyUpiBtn.addEventListener('click',    ()=>copyCol('UPI ID','UPI ID'));
+
+downloadCsvBtn.addEventListener('click', ()=>{
+  const rows=getRows(); if(!rows.length) return;
+  dlFile(toCSV(rows),'extracted_data.csv','text/csv;charset=utf-8');
+});
+downloadXlsxBtn.addEventListener('click', ()=>{
+  const rows=getRows(); if(!rows.length) return;
+  const ws=XLSX.utils.json_to_sheet(rows,{header:HEADERS});
+  const wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb,ws,'Data');
+  XLSX.writeFile(wb,'extracted_data.xlsx');
+});
+checkDupBtn.addEventListener('click', showDups);
+</script>
+</body>
+</html>
