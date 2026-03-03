@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Screenshot Data Extractor</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js" defer></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js" defer></script>
+    <script src="app.js" defer></script>
+  </head>
+  <body>
+    <main class="app-shell">
+      <header>
+        <h1>Screenshot Data Extractor</h1>
+        <p class="subtitle">
+          Upload one or many screenshots and extract name, mobile number, email, and UPI ID using free in-browser OCR.
+        </p>
+      </header>
+
+      <section class="panel">
+        <h2>1) Upload screenshots</h2>
+        <input id="imageInput" type="file" accept="image/*" multiple />
+        <p class="hint">Tip: Higher quality screenshots give better extraction results.</p>
+        <p id="selectedCount" class="hint"></p>
+        <div id="previewGrid" class="preview-grid" aria-live="polite"></div>
+      </section>
+
+      <section class="panel">
+        <h2>2) Choose fields to keep</h2>
+        <div class="field-grid">
+          <label><input type="checkbox" class="field-checkbox" value="name"   checked /> Name</label>
+          <label><input type="checkbox" class="field-checkbox" value="mobile" checked /> Mobile</label>
+          <label><input type="checkbox" class="field-checkbox" value="email"  checked /> Email</label>
+          <label><input type="checkbox" class="field-checkbox" value="upi"    checked /> UPI ID</label>
+        </div>
+        <button id="extractBtn" type="button">Extract from screenshots</button>
+      </section>
+
+      <section class="panel">
+        <h2>3) Results</h2>
+        <div id="status" class="status" aria-live="polite"></div>
+
+        <div class="actions">
+          <button id="copyBtn"       type="button" disabled>Copy all columns (sheet format)</button>
+          <button id="copyNameBtn"   type="button" disabled>Copy Name column</button>
+          <button id="copyMobileBtn" type="button" disabled>Copy Mobile column</button>
+          <button id="copyEmailBtn"  type="button" disabled>Copy Email column</button>
+          <button id="copyUpiBtn"    type="button" disabled>Copy UPI column</button>
+        </div>
+
+        <div class="actions">
+          <button id="downloadCsvBtn"  type="button" disabled>Download CSV</button>
+          <button id="downloadXlsxBtn" type="button" disabled>Download Excel (.xlsx)</button>
+          <button id="checkDupBtn"     type="button" disabled class="btn-dup">🔍 Check Duplicates</button>
+        </div>
+
+        <div class="table-wrap">
+          <table id="resultsTable">
+            <thead>
+              <tr>
+                <th>File</th>
+                <th>Name</th>
+                <th>Mobile</th>
+                <th>Email</th>
+                <th>UPI ID</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- Image preview modal -->
+    <div id="imageModal" class="image-modal" hidden>
+      <button id="closeModalBtn" class="modal-close" type="button" aria-label="Close image preview">×</button>
+      <img id="modalImage" alt="Uploaded preview" />
+      <p id="modalCaption"></p>
+    </div>
+
+    <!-- Duplicate detection modal -->
+    <div id="dupModal" class="image-modal dup-modal" hidden>
+      <div class="dup-modal-box">
+        <div class="dup-modal-header">
+          <h3>Duplicate Mobile Numbers</h3>
+          <button id="closeDupModalBtn" class="modal-close-inline" type="button" aria-label="Close">×</button>
+        </div>
+        <div id="dupModalBody" class="dup-modal-body"></div>
+      </div>
+    </div>
+  </body>
+</html>
