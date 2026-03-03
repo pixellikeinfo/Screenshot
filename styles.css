@@ -57,7 +57,9 @@ header h1 {
   border-radius: 10px;
   padding: 6px;
   background: #f8fbff;
+  color: #0f172a;
   cursor: pointer;
+  text-align: left;
 }
 
 .preview-card img {
@@ -161,4 +163,10 @@ th {
   border-radius: 50%;
   background: #111827;
   border: 1px solid #fff;
+}
+
+
+.image-modal[hidden] {
+  display: none !important;
+  pointer-events: none;
 }
