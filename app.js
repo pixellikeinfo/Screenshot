@@ -1,11 +1,8 @@
 /**
- * APP.JS - TOTAL SYSTEM LOGIC
- * Includes: Pre-processing, Multi-Pass OCR, Intelligent Name Mapping, and UI Control.
+ * APP.JS - COMPLETE RESTORATION
  */
 
-// ---------------------------------------------------------
-// 1. DOM ELEMENT REFERENCES
-// ---------------------------------------------------------
+// --- 1. ELEMENT SELECTORS ---
 const imageInput = document.getElementById('imageInput');
 const extractBtn = document.getElementById('extractBtn');
 const toggleDupesBtn = document.getElementById('toggleDupesBtn');
@@ -25,359 +22,226 @@ const modalCaption = document.getElementById('modalCaption');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const selectedCountEl = document.getElementById('selectedCount');
 
-// ---------------------------------------------------------
-// 2. GLOBAL APPLICATION STATE
-// ---------------------------------------------------------
-const TABLE_HEADERS = ['Status', 'File', 'Name', 'Mobile', 'Email', 'UPI ID'];
-let globalExtractedData = [];
-let activePreviewUrls = [];
-let userSelectedFiles = [];
-let isFilteringDuplicates = false;
+// --- 2. GLOBAL STATE ---
+const HEADERS = ['Status', 'File', 'Name', 'Mobile', 'Email', 'UPI ID'];
+let extractionList = []; // Array of File objects
+let processedResults = []; // Array of extracted row objects
+let isUniqueMode = false;
 
-// ---------------------------------------------------------
-// 3. INTELLIGENT OCR UTILITY FUNCTIONS
-// ---------------------------------------------------------
+// --- 3. HELPER FUNCTIONS (ZERO CUTS) ---
 
-/**
- * Ensures mobile numbers follow a standard format.
- * Handles cases where OCR might miss the "+" or "91".
- */
-function standardizePhoneNumber(raw) {
-    // Strip everything that isn't a digit or a plus sign
-    let digitsOnly = raw.replace(/[^\d+]/g, '');
-    let pureNumbers = digitsOnly.replace(/\D/g, '');
-
-    // If it looks like a 12-digit Indian number starting with 91, add the +
-    if (pureNumbers.length === 12 && pureNumbers.startsWith('91') && !digitsOnly.startsWith('+')) {
-        return '+' + digitsOnly;
+function standardizeMobile(raw) {
+    let fixed = raw.replace(/[oO]/g, '0').replace(/[lI|]/g, '1');
+    let digits = fixed.replace(/[^\d+]/g, '');
+    if (digits.length === 12 && digits.startsWith('91') && !fixed.startsWith('+')) {
+        return '+' + digits;
     }
-    
-    return digitsOnly;
+    return digits;
 }
 
-/**
- * Advanced Regex to find numbers even if they have spaces like "97471 15622".
- */
-function findAllMobileNumbers(textContent) {
-    // Sanitize common OCR errors (e.g., mistaking 'o' for '0')
-    const sanitized = textContent
-        .replace(/[oO]/g, '0')
-        .replace(/[lI|]/g, '1')
-        .replace(/[sS]/g, '5')
-        .replace(/[bB]/g, '8');
-
-    const uniqueFound = new Set();
-    
-    // Pattern: Matches optional +91 and 10 digits with potential spaces/dots/dashes
-    const mobilePattern = /(?:\+?91[\s.-]*)?[6-9](?:[\s.-]*\d){9}\b/g;
-    const allMatches = sanitized.match(mobilePattern) || [];
-
-    allMatches.forEach((match) => {
-        const standard = standardizePhoneNumber(match);
-        // Only accept if it has at least 10 digits
-        if (standard.replace(/\D/g, '').length >= 10) {
-            uniqueFound.add(standard);
-        }
-    });
-    
-    return Array.from(uniqueFound);
+function isValidName(text) {
+    if (!text) return false;
+    const t = text.trim();
+    const tLow = t.toLowerCase();
+    const noise = ['search', 'lte', 'volte', '5g', 'today', 'yesterday', 'contacts', 'invite', 'add', 'view'];
+    if (noise.some(word => tLow.includes(word))) return false;
+    if (t.length < 2 || t.length > 50 || /[@:]/.test(t)) return false;
+    const alpha = (t.match(/[a-zA-Z]/g) || []).length;
+    const nums = (t.match(/\d/g) || []).length;
+    return alpha >= 2 && nums <= (alpha / 1.5);
 }
 
-/**
- * Checks if a line of text is a valid name or just system text (like "Search").
- */
-function isAValidName(str) {
-    if (!str) return false;
-    const trimmed = str.trim();
-    const low = trimmed.toLowerCase();
-    
-    // List of words to ignore from the screenshots
-    const blacklist = ['search', 'mobile', 'add', 'view', 'contacts', 'today', 'yesterday', 'lte', '5g', 'volte', 'invite'];
-    
-    if (blacklist.some(word => low.includes(word))) return false;
-    if (trimmed.length < 2 || trimmed.length > 60) return false;
-    if (/[@:]/.test(trimmed)) return false; 
-
-    const alphaCount = (trimmed.match(/[a-zA-Z]/g) || []).length;
-    const digitCount = (trimmed.match(/\d/g) || []).length;
-    
-    return alphaCount >= 2 && digitCount <= Math.ceil(alphaCount / 1.5);
-}
-
-/**
- * Logic to find the name associated with a specific mobile number line.
- */
-function findNameForLine(allLines, currentIndex) {
-    // Step A: Check the line where the number was found (names sometimes share a line)
-    const currentLineClean = allLines[currentIndex].replace(/(?:\+?91[\s.-]*)?[6-9](?:[\s.-]*\d){9}/g, '').trim();
-    if (isAValidName(currentLineClean)) return currentLineClean;
-
-    // Step B: Look at the 3 lines directly ABOVE the phone number
-    for (let offset = 1; offset <= 3; offset++) {
-        const previousLine = allLines[currentIndex - offset];
-        if (previousLine && isAValidName(previousLine)) {
-            return previousLine.trim();
-        }
+function findNameAbove(lines, index) {
+    // Check line where number is, then 3 lines above
+    for (let i = 0; i <= 3; i++) {
+        let currentIdx = index - i;
+        if (currentIdx < 0) continue;
+        let line = lines[currentIdx].replace(/(?:\+?91[\s.-]*)?[6-9](?:[\s.-]*\d){9}/g, '').trim();
+        if (isValidName(line)) return line;
     }
-    
     return 'Unknown Contact';
 }
 
-// ---------------------------------------------------------
-// 4. IMAGE ENHANCEMENT & MULTI-PASS OCR
-// ---------------------------------------------------------
-
-/**
- * Prepares the screenshot for better digit recognition (High Contrast).
- */
-async function getEnhancedImageBlob(file) {
-    try {
-        const bitmap = await createImageBitmap(file);
-        const canvas = document.createElement('canvas');
-        
-        // Boost the scale to make small numbers clearer
-        canvas.width = bitmap.width * 2;
-        canvas.height = bitmap.height * 2;
-        
-        const context = canvas.getContext('2d', { willReadFrequently: true });
-        context.fillStyle = '#ffffff';
-        context.fillRect(0, 0, canvas.width, canvas.height);
-        context.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        
-        const imgData = context.getImageData(0, 0, canvas.width, canvas.height);
-        const buffer = imgData.data;
-
-        // Binarization: Convert pixels to pure black or pure white
-        for (let i = 0; i < buffer.length; i += 4) {
-            const luma = 0.2126 * buffer[i] + 0.7152 * buffer[i+1] + 0.0722 * buffer[i+2];
-            const thresholdValue = luma > 150 ? 255 : 0;
-            buffer[i] = buffer[i+1] = buffer[i+2] = thresholdValue;
-        }
-        
-        context.putImageData(imgData, 0, 0);
-        return new Promise(resolve => canvas.toBlob(resolve, 'image/png'));
-    } catch (err) {
-        console.error("Enhancement module failed", err);
-        return null;
+async function enhanceImage(file) {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width * 2;
+    canvas.height = bitmap.height * 2;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    ctx.fillStyle = 'white';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    
+    const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const data = imgData.data;
+    for (let i = 0; i < data.length; i += 4) {
+        const avg = 0.2126 * data[i] + 0.7152 * data[i+1] + 0.0722 * data[i+2];
+        const val = avg > 140 ? 255 : 0;
+        data[i] = data[i+1] = data[i+2] = val;
     }
+    ctx.putImageData(imgData, 0, 0);
+    return new Promise(res => canvas.toBlob(res, 'image/png'));
 }
 
-/**
- * Executes a two-pass OCR process to ensure no data is missed.
- */
-async function executeDualPassOCR(imageFile) {
-    // PASS 1: Recognition on the raw image
-    const rawResult = await Tesseract.recognize(imageFile, 'eng');
-    const textPass1 = rawResult.data.text;
-    
-    // PASS 2: Recognition on the high-contrast enhanced image
-    const enhancedBlob = await getEnhancedImageBlob(imageFile);
-    let textPass2 = '';
-    if (enhancedBlob) {
-        const enhancedResult = await Tesseract.recognize(enhancedBlob, 'eng');
-        textPass2 = enhancedResult.data.text;
+// --- 4. CORE OCR ENGINE ---
+
+async function runOCR(file) {
+    // Two-pass OCR for accuracy
+    const { data: { text: t1 } } = await Tesseract.recognize(file, 'eng');
+    const blob = await enhanceImage(file);
+    let t2 = '';
+    if (blob) {
+        const { data: { text } } = await Tesseract.recognize(blob, 'eng');
+        t2 = text;
     }
 
-    const mergedText = textPass1 + '\n' + textPass2;
-    const detectedMobiles = findAllMobileNumbers(mergedText);
-    const splitLines = mergedText.split(/\r?\n/).filter(line => line.trim().length > 0);
+    const fullText = t1 + '\n' + t2;
+    const lines = fullText.split(/\r?\n/).filter(l => l.trim() !== "");
+    const mobileRegex = /(?:\+?91[\s.-]*)?[6-9](?:[\s.-]*\d){9}\b/g;
+    
+    const mobilesFound = fullText.match(mobileRegex) || [];
+    const uniqueInFile = new Set();
+    const finalRows = [];
 
-    return detectedMobiles.map(mobile => {
-        const cleanMobileStr = mobile.replace(/[^\d+]/g, '');
-        // Locate the line index where the number appeared
-        const linePos = splitLines.findIndex(ln => ln.replace(/[^\d+]/g, '').includes(cleanMobileStr));
-        
-        return {
-            status: '',
-            file: imageFile.name,
-            name: linePos >= 0 ? findNameForLine(splitLines, linePos) : 'Not found',
-            mobile: mobile,
-            email: (mergedText.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i) || [''])[0],
-            upi: (mergedText.match(/\b[a-zA-Z0-9._-]{2,}@[a-zA-Z]{2,}\b/) || [''])[0]
-        };
-    });
-}
-
-// ---------------------------------------------------------
-// 5. UI INTERACTION & FILE MANAGEMENT
-// ---------------------------------------------------------
-
-imageInput.addEventListener('change', () => {
-    const newlySelected = Array.from(imageInput.files);
-    newlySelected.forEach(file => {
-        const uniqueKey = `${file.name}-${file.size}`;
-        if (!userSelectedFiles.some(existing => `${existing.name}-${existing.size}` === uniqueKey)) {
-            userSelectedFiles.push(file);
+    mobilesFound.forEach(m => {
+        const clean = standardizeMobile(m);
+        const core = clean.slice(-10);
+        if (!uniqueInFile.has(core)) {
+            uniqueInFile.add(core);
+            const lineIdx = lines.findIndex(l => standardizeMobile(l).includes(core));
+            finalRows.push({
+                file: file.name,
+                name: lineIdx >= 0 ? findNameAbove(lines, lineIdx) : 'Unknown',
+                mobile: m,
+                email: (fullText.match(/[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/) || [""])[0],
+                upi: (fullText.match(/[a-zA-Z0-9._-]+@[a-zA-Z]{3,}/) || [""])[0]
+            });
         }
     });
-    
-    refreshImagePreviews();
-    selectedCountEl.textContent = `${userSelectedFiles.length} files selected for processing.`;
-    imageInput.value = ''; // Reset input to allow re-upload of same files
-});
+    return finalRows;
+}
 
-function refreshImagePreviews() {
-    activePreviewUrls.forEach(URL.revokeObjectURL);
-    activePreviewUrls = [];
+// --- 5. UI & EVENT HANDLERS ---
+
+imageInput.onchange = () => {
+    const files = Array.from(imageInput.files);
+    files.forEach(f => {
+        if (!extractionList.some(ef => ef.name === f.name && ef.size === f.size)) {
+            extractionList.push(f);
+        }
+    });
+    renderPreviews();
+    selectedCountEl.textContent = `${extractionList.length} files selected.`;
+    imageInput.value = '';
+};
+
+function renderPreviews() {
     previewGrid.innerHTML = '';
-
-    userSelectedFiles.forEach(file => {
-        const objectUrl = URL.createObjectURL(file);
-        activePreviewUrls.push(objectUrl);
-        
+    extractionList.forEach(file => {
+        const url = URL.createObjectURL(file);
         const card = document.createElement('div');
         card.className = 'preview-card';
         card.innerHTML = `
-            <button class="remove-trigger" title="Remove image">&times;</button>
-            <div class="card-inner">
-                <img src="${objectUrl}">
-                <span class="filename-tag">${file.name}</span>
-            </div>
+            <button class="remove-btn">&times;</button>
+            <img src="${url}">
+            <span class="file-label">${file.name}</span>
         `;
-        
         card.onclick = () => {
-            modalImage.src = objectUrl;
+            modalImage.src = url;
             modalCaption.textContent = file.name;
             imageModal.hidden = false;
         };
-
-        card.querySelector('.remove-trigger').onclick = (event) => {
-            event.stopPropagation();
-            userSelectedFiles = userSelectedFiles.filter(f => f !== file);
-            refreshImagePreviews();
-            selectedCountEl.textContent = `${userSelectedFiles.length} files selected.`;
+        card.querySelector('.remove-btn').onclick = (e) => {
+            e.stopPropagation();
+            extractionList = extractionList.filter(f => f !== file);
+            renderPreviews();
+            selectedCountEl.textContent = `${extractionList.length} files selected.`;
         };
-
         previewGrid.appendChild(card);
     });
 }
 
-closeModalBtn.onclick = () => {
-    imageModal.hidden = true;
-};
-
-// ---------------------------------------------------------
-// 6. PROCESSING & TABLE RENDERING
-// ---------------------------------------------------------
+closeModalBtn.onclick = () => imageModal.hidden = true;
 
 extractBtn.onclick = async () => {
-    const activeFields = Array.from(document.querySelectorAll('.field-checkbox:checked')).map(cb => cb.value);
+    if (!extractionList.length) return alert("Please upload images.");
+    const fields = Array.from(document.querySelectorAll('.field-checkbox:checked')).map(cb => cb.value);
     
-    if (userSelectedFiles.length === 0) {
-        alert("Please upload at least one screenshot.");
-        return;
-    }
-
     extractBtn.disabled = true;
-    globalExtractedData = [];
-    statusEl.textContent = "Booting OCR Engine...";
+    processedResults = [];
+    statusEl.textContent = "Processing...";
 
-    for (let i = 0; i < userSelectedFiles.length; i++) {
-        const currentFile = userSelectedFiles[i];
-        statusEl.textContent = `Processing image ${i + 1} of ${userSelectedFiles.length}...`;
-        
-        try {
-            const extractionResults = await executeDualPassOCR(currentFile);
-            extractionResults.forEach(item => {
-                // Filter the data based on what checkboxes were checked
-                const finalRowObject = { status: '', file: item.file };
-                finalRowObject.name = activeFields.includes('name') ? item.name : '';
-                finalRowObject.mobile = activeFields.includes('mobile') ? item.mobile : '';
-                finalRowObject.email = activeFields.includes('email') ? item.email : '';
-                finalRowObject.upi = activeFields.includes('upi') ? item.upi : '';
-                globalExtractedData.push(finalRowObject);
-            });
-        } catch (error) {
-            console.error("OCR cycle failed for " + currentFile.name, error);
-        }
+    for (let i = 0; i < extractionList.length; i++) {
+        statusEl.textContent = `Analyzing ${i+1}/${extractionList.length}...`;
+        const results = await runOCR(extractionList[i]);
+        results.forEach(res => {
+            const final = { status: '', file: res.file };
+            final.name = fields.includes('name') ? res.name : '';
+            final.mobile = fields.includes('mobile') ? res.mobile : '';
+            final.email = fields.includes('email') ? res.email : '';
+            final.upi = fields.includes('upi') ? res.upi : '';
+            processedResults.push(final);
+        });
     }
 
-    statusEl.textContent = "All images processed successfully.";
-    renderMainResultsTable();
-    
-    // Enable export and copy buttons
-    [copyBtn, toggleDupesBtn, copyNameBtn, copyMobileBtn, copyEmailBtn, copyUpiBtn, downloadCsvBtn, downloadXlsxBtn].forEach(btn => btn.disabled = false);
+    statusEl.textContent = "Extraction complete!";
+    renderTable();
+    [copyBtn, toggleDupesBtn, copyNameBtn, copyMobileBtn, copyEmailBtn, copyUpiBtn, downloadCsvBtn, downloadXlsxBtn].forEach(b => b.disabled = false);
     extractBtn.disabled = false;
 };
 
-function renderMainResultsTable() {
+function renderTable() {
     tableBody.innerHTML = '';
-    const mobileRegistry = new Set();
-    
-    // Mark duplicates globally
-    globalExtractedData.forEach(entry => {
-        const coreMobile = entry.mobile.replace(/\D/g, '').slice(-10);
-        if (coreMobile && mobileRegistry.has(coreMobile)) {
-            entry.status = 'Duplicate';
-        } else if (coreMobile) {
-            entry.status = 'Unique';
-            mobileRegistry.add(coreMobile);
-        }
+    const seen = new Set();
+    processedResults.forEach(r => {
+        const core = r.mobile.replace(/\D/g, '').slice(-10);
+        if (core && seen.has(core)) r.status = 'Duplicate';
+        else if (core) { r.status = 'Unique'; seen.add(core); }
     });
 
-    const rowsToDraw = isFilteringDuplicates 
-        ? globalExtractedData.filter(e => e.status !== 'Duplicate') 
-        : globalExtractedData;
+    const display = isUniqueMode ? processedResults.filter(r => r.status !== 'Duplicate') : processedResults;
 
-    rowsToDraw.forEach(dataRow => {
+    display.forEach(row => {
         const tr = document.createElement('tr');
-        if (dataRow.status === 'Duplicate') tr.className = 'duplicate-row';
-        
-        TABLE_HEADERS.forEach(header => {
+        if (row.status === 'Duplicate') tr.className = 'dupe-row';
+        HEADERS.forEach(h => {
             const td = document.createElement('td');
-            const dataMapKey = header === 'UPI ID' ? 'upi' : header.toLowerCase();
-            td.textContent = dataRow[dataMapKey] || '';
+            const k = h === 'UPI ID' ? 'upi' : h.toLowerCase();
+            td.textContent = row[k] || '';
             tr.appendChild(td);
         });
         tableBody.appendChild(tr);
     });
 }
 
-// ---------------------------------------------------------
-// 7. EXPORT & UTILITY HANDLERS
-// ---------------------------------------------------------
+// --- 6. EXPORT ACTIONS ---
 
 toggleDupesBtn.onclick = () => {
-    isFilteringDuplicates = !isFilteringDuplicates;
-    toggleDupesBtn.textContent = isFilteringDuplicates ? "Showing Unique Only" : "Hide Duplicates";
-    renderMainResultsTable();
+    isUniqueMode = !isUniqueMode;
+    toggleDupesBtn.textContent = isUniqueMode ? "Show All" : "Hide Duplicates";
+    renderTable();
 };
 
 copyBtn.onclick = () => {
-    const tableText = globalExtractedData.map(r => Object.values(r).join('\t')).join('\n');
-    navigator.clipboard.writeText(tableText).then(() => {
-        statusEl.textContent = "Complete table copied to clipboard!";
-    });
+    const t = processedResults.map(r => Object.values(r).join('\t')).join('\n');
+    navigator.clipboard.writeText(t);
+    statusEl.textContent = "Table copied!";
 };
 
-copyNameBtn.onclick = () => {
-    const names = globalExtractedData.map(r => r.name).join('\n');
-    navigator.clipboard.writeText(names).then(() => {
-        statusEl.textContent = "Names copied to clipboard!";
-    });
-};
+copyNameBtn.onclick = () => navigator.clipboard.writeText(processedResults.map(r => r.name).join('\n'));
+copyMobileBtn.onclick = () => navigator.clipboard.writeText(processedResults.map(r => r.mobile).join('\n'));
 
-copyMobileBtn.onclick = () => {
-    const mobiles = globalExtractedData.map(r => r.mobile).join('\n');
-    navigator.clipboard.writeText(mobiles).then(() => {
-        statusEl.textContent = "Mobiles copied to clipboard!";
-    });
+downloadXlsxBtn.onclick = () => {
+    const ws = XLSX.utils.json_to_sheet(processedResults);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Data");
+    XLSX.writeFile(wb, "contacts.xlsx");
 };
 
 downloadCsvBtn.onclick = () => {
-    const csvRows = [TABLE_HEADERS.join(','), ...globalExtractedData.map(r => Object.values(r).join(','))];
-    const csvBlob = new Blob([csvRows.join('\n')], { type: 'text/csv' });
-    const blobUrl = URL.createObjectURL(csvBlob);
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = 'extracted_contacts_data.csv';
-    link.click();
-    URL.revokeObjectURL(blobUrl);
-};
-
-downloadXlsxBtn.onclick = () => {
-    const worksheet = XLSX.utils.json_to_sheet(globalExtractedData);
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, "Extracted Contacts");
-    XLSX.writeFile(workbook, "extracted_contact_list.xlsx");
+    const csv = [HEADERS.join(','), ...processedResults.map(r => Object.values(r).join(','))].join('\n');
+    const b = new Blob([csv], { type: 'text/csv' });
+    const u = URL.createObjectURL(b);
+    const a = document.createElement('a');
+    a.href = u; a.download = 'contacts.csv'; a.click();
 };
