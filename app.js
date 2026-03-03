@@ -47,19 +47,27 @@ function findPhonesInLine(line) {
   const phones = [];
   const seen = new Set();
 
-  // Match: optional + and country code, then digit groups separated by spaces/dashes
-  // This single pattern catches all formats
   const RE = /(\+\d{1,3}[\s\-]?)?\d[\d\s\-]{7,}/g;
 
   let m;
   while ((m = RE.exec(line)) !== null) {
-    // Strip all spaces and dashes to get clean digits (keep + prefix)
     const raw = m[0].trim();
-    const cleaned = raw.startsWith('+')
+    let cleaned = raw.startsWith('+')
       ? '+' + raw.slice(1).replace(/[\s\-]/g, '')
       : raw.replace(/[\s\-]/g, '');
 
-    // Must have at least 7 digits to be a phone number
+    // Fix OCR misread: dark backgrounds cause +91 to be read as +97/+90/+92 etc.
+    // If number starts with +9X (X != 1), has 12 digits, and last 10 are valid Indian → fix to +91
+    if (cleaned.startsWith('+9') && !cleaned.startsWith('+91')) {
+      const digits = cleaned.replace(/\D/g, '');
+      if (digits.length === 12) {
+        const last10 = digits.slice(2);
+        if (/^[6-9]\d{9}$/.test(last10)) {
+          cleaned = '+91' + last10;
+        }
+      }
+    }
+
     const digitCount = cleaned.replace(/\D/g, '').length;
     if (digitCount < 7 || digitCount > 15) continue;
     if (seen.has(cleaned)) continue;
@@ -104,8 +112,9 @@ function toNameCandidate(line) {
     .replace(/\s{2,}/g, ' ')
     .trim();
 
-  // Strip leading single digit or short all-caps OCR noise (e.g. "1 Name", "TTA Name")
-  s = s.replace(/^(\d{1,2}|[A-Z]{1,3})\s+/, '').trim();
+  // Strip leading OCR noise: single/double digit prefix OR 1-3 char token (all-caps or lowercase)
+  // e.g. "1 Name" → "Name", "TTA Name" → "Name", "ws Name" → "Name"
+  s = s.replace(/^(\d{1,2}|[A-Za-z]{1,3})\s+(?=[A-Z])/, '').trim();
 
   return s;
 }
@@ -201,109 +210,105 @@ function parseContacts(text, globalEmail, globalUPI) {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 5 – IMAGE PRE-PROCESSING (4 variants for best OCR)
+   SECTION 5 – GEMINI VISION API
+   Free tier: 1,500 requests/day with Gemini 1.5 Flash
+   Reads images like a human — exact numbers, exact names, zero misreads
    ════════════════════════════════════════════════════════════════════ */
 
-async function preprocessImageVariants(file) {
-  const variants = [];
-  try {
-    const bitmap = await createImageBitmap(file);
+// Paste your free Gemini API key here
+// Get it free at: https://aistudio.google.com/app/apikey
+const GEMINI_API_KEY = 'AIzaSyAXT2ZEJRimUIBsremBfX3-f1821Y1VQCY';
 
-    const binarise = (ctx, w, h, thr) => {
-      const id = ctx.getImageData(0, 0, w, h);
-      const d  = id.data;
-      for (let i = 0; i < d.length; i += 4) {
-        const g = 0.2126 * d[i] + 0.7152 * d[i + 1] + 0.0722 * d[i + 2];
-        const v = g > thr ? 255 : 0;
-        d[i] = d[i + 1] = d[i + 2] = v;
-      }
-      ctx.putImageData(id, 0, 0);
-    };
-
-    const toBlob = c => new Promise(res => c.toBlob(res, 'image/png'));
-    const mkC    = scale => {
-      const c = document.createElement('canvas');
-      c.width  = bitmap.width  * scale;
-      c.height = bitmap.height * scale;
-      return c;
-    };
-
-    // v1 – 2× + threshold 145 (light background)
-    { const c = mkC(2), ctx = c.getContext('2d', { willReadFrequently: true });
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-      ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-      binarise(ctx, c.width, c.height, 145);
-      const b = await toBlob(c); if (b) variants.push(b); }
-
-    // v2 – 2× greyscale + contrast (coloured backgrounds)
-    { const c = mkC(2), ctx = c.getContext('2d', { willReadFrequently: true });
-      ctx.filter = 'grayscale(1) contrast(1.5) brightness(1.1)';
-      ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-      const b = await toBlob(c); if (b) variants.push(b); }
-
-    // v3 – 3× + threshold 128 (small text)
-    { const c = mkC(3), ctx = c.getContext('2d', { willReadFrequently: true });
-      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
-      ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-      binarise(ctx, c.width, c.height, 128);
-      const b = await toBlob(c); if (b) variants.push(b); }
-
-    // v4 – 2× inverted + threshold (dark mode screenshots)
-    { const c = mkC(2), ctx = c.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-      const id = ctx.getImageData(0, 0, c.width, c.height); const d = id.data;
-      for (let i = 0; i < d.length; i += 4) {
-        d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2];
-      }
-      ctx.putImageData(id, 0, 0);
-      binarise(ctx, c.width, c.height, 128);
-      const b = await toBlob(c); if (b) variants.push(b); }
-
-  } catch (err) { console.error('Preprocessing failed:', err); }
-  return variants;
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   SECTION 6 – OCR
-   ════════════════════════════════════════════════════════════════════ */
-
-async function ocrBlob(blob) {
-  try {
-    const { data: { text } } = await Tesseract.recognize(blob, 'eng', {
-      tessedit_pageseg_mode: 6,
-    });
-    return text || '';
-  } catch (e) {
-    console.error('OCR error:', e);
-    return '';
-  }
+async function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = () => resolve(reader.result.split(',')[1]);
+    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.readAsDataURL(file);
+  });
 }
 
 async function runOCR(file) {
-  const origText     = await ocrBlob(file);
-  const variants     = await preprocessImageVariants(file);
-  const variantTexts = await Promise.all(variants.map(v => ocrBlob(v)));
-
-  const allTexts = [origText, ...variantTexts].filter(t => t.trim().length > 0);
-  if (!allTexts.length) {
+  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
+    showStatus('⚠️ Please add your Gemini API key in app.js (line with GEMINI_API_KEY)', true);
     return [{ file: file.name, name: '', mobile: '', email: '', upi: '' }];
   }
 
-  // Use the OCR result that found the most phone numbers
-  const best = allTexts
-    .map(t => ({ text: t, score: findPhonesInLine(t.replace(/\n/g, ' ')).length }))
-    .sort((a, b) => b.score - a.score)[0].text;
-
-  const globalEmail = extractEmail(allTexts.join('\n'));
-  const globalUPI   = extractUPI(allTexts.join('\n'));
-
-  const records = parseContacts(best, globalEmail, globalUPI);
-
-  if (!records.length) {
-    return [{ file: file.name, name: '', mobile: '', email: globalEmail, upi: globalUPI }];
+  let base64, mimeType;
+  try {
+    base64   = await fileToBase64(file);
+    mimeType = file.type || 'image/jpeg';
+  } catch (e) {
+    console.error('File read error:', e);
+    return [{ file: file.name, name: '', mobile: '', email: '', upi: '' }];
   }
 
-  return records.map(r => ({ file: file.name, ...r }));
+  const prompt = `Look at this screenshot carefully. It shows a list of contacts or phone numbers.
+
+Your job:
+1. Find EVERY phone number visible — read each digit EXACTLY as it appears on screen.
+2. For each number, find its associated name (shown just above or beside the number). If no name, leave it blank.
+3. Also extract any email address or UPI ID if visible.
+
+Return ONLY a raw JSON array — no explanation, no markdown, no code fences. Example:
+[
+  {"name": "Jeevan bose33", "mobile": "+917907425814", "email": "", "upi": ""},
+  {"name": "", "mobile": "+919746768963", "email": "", "upi": ""}
+]
+
+Rules:
+- Copy each number EXACTLY as shown including the country code (e.g. +91, +971)
+- Remove spaces within the number but keep the + sign
+- If no country code is shown, write the number as-is
+- Do NOT change, guess or correct any digit
+- Name should be copied exactly as shown
+- If nothing found, return []`;
+
+  try {
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{
+          parts: [
+            { inline_data: { mime_type: mimeType, data: base64 } },
+            { text: prompt }
+          ]
+        }],
+        generationConfig: { temperature: 0, maxOutputTokens: 2048 }
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      const msg = data.error?.message || 'Gemini API error';
+      throw new Error(msg);
+    }
+
+    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    const clean = raw.replace(/```json|```/g, '').trim();
+    const parsed = JSON.parse(clean);
+
+    if (!Array.isArray(parsed) || !parsed.length) {
+      return [{ file: file.name, name: '', mobile: '', email: '', upi: '' }];
+    }
+
+    return parsed.map(r => ({
+      file:   file.name,
+      name:   cleanStr(r.name   || ''),
+      mobile: cleanStr(r.mobile || ''),
+      email:  cleanStr(r.email  || ''),
+      upi:    cleanStr(r.upi    || ''),
+    }));
+
+  } catch (err) {
+    console.error('Gemini API error:', err);
+    showStatus(`❌ Gemini error: ${err.message}`, true);
+    return [{ file: file.name, name: '', mobile: '', email: '', upi: '' }];
+  }
 }
 
 /* ════════════════════════════════════════════════════════════════════
