@@ -217,7 +217,7 @@ function parseContacts(text, globalEmail, globalUPI) {
 
 // Paste your free Gemini API key here
 // Get it free at: https://aistudio.google.com/app/apikey
-const GEMINI_API_KEY = 'AIzaSyAXT2ZEJRimUIBsremBfX3-f1821Y1VQCY';
+const GEMINI_API_KEY = 'AIzaSyB9Voek0bUq2TB0ohqm4oVsVcgzhLUvAMQ';
 
 async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
