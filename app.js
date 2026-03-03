@@ -35,33 +35,56 @@ let selectedFiles = [];
    ════════════════════════════════════════════════════════════════════ */
 
 /**
- * Given a raw matched string return a canonical phone string:
- *   Indian  → 10 plain digits
- *   Other   → "+<digits>"
- *   Invalid → ""
+ * Given a raw matched string return a canonical phone string.
+ *
+ * Indian  → 10 plain digits     e.g. "9746768963"
+ * Intl    → "+<digits>"         e.g. "+971544533584"
+ * Invalid → ""
+ *
+ * Also handles OCR noise where one extra digit gets attached:
+ *   e.g. 11 raw digits "98457845687" → tries last-10 and first-10
  */
 function canonicalPhone(raw) {
   const digits = raw.replace(/\D/g, '');
+
+  // ── Indian: +91 prefix (12 digits)
   if (digits.length === 12 && digits.startsWith('91')) {
     const n = digits.slice(2);
     if (/^[6-9]\d{9}$/.test(n)) return n;
   }
+  // ── Indian: leading 0 (11 digits)
   if (digits.length === 11 && digits.startsWith('0')) {
     const n = digits.slice(1);
     if (/^[6-9]\d{9}$/.test(n)) return n;
   }
+  // ── Indian: bare 10 digits
   if (digits.length === 10 && /^[6-9]\d{9}$/.test(digits)) return digits;
-  // International (non-91, 7-15 digits)
+
+  // ── OCR noise: 11 digits not starting with 91 or 0
+  //    Could be a real 10-digit Indian number with one stray OCR digit.
+  //    Try stripping the first digit, then the last digit.
+  if (digits.length === 11 && !digits.startsWith('91') && !digits.startsWith('0')) {
+    const tryLast10  = digits.slice(1);   // drop first digit
+    const tryFirst10 = digits.slice(0,10);// drop last digit
+    if (/^[6-9]\d{9}$/.test(tryLast10))  return tryLast10;
+    if (/^[6-9]\d{9}$/.test(tryFirst10)) return tryFirst10;
+  }
+
+  // ── International: 7–15 digits, not starting with 91 or 0
   if (digits.length >= 7 && digits.length <= 15 &&
       !digits.startsWith('91') && !digits.startsWith('0')) {
     return '+' + digits;
   }
+
   return '';
 }
 
 /**
  * Extract ALL distinct phone numbers from a single text string.
- * Conservative regex – no sliding window – so no phantom numbers.
+ * Handles:
+ *   Indian  : +91 / 91 / 0 prefix, bare 10-digit  → stored as 10 digits
+ *   International : +<cc><number> or bare multi-digit  → stored as +<digits>
+ * No sliding window – zero phantom numbers.
  */
 function phonesFromText(text) {
   // OCR digit-context substitutions only
@@ -78,17 +101,26 @@ function phonesFromText(text) {
     if (c && !seen.has(c)) { seen.add(c); result.push(c); }
   };
 
-  // Primary: Indian numbers (+91 / 91 / 0 / bare) with optional separators
+  // 1. Indian numbers: +91 / 91 / 0 prefix OR bare 10-digit starting 6-9
   const RE_INDIAN =
     /(?<!\d)(?:\+\s*91|91|0)?[\s.\-()]*[6-9](?:[\s.\-()]*\d){9}(?!\d)/g;
 
-  // Secondary: explicit + prefix international (covers +971, +1, etc.)
-  const RE_INTL =
-    /\+(?!91[\s.\-()])[1-9]\d{0,2}[\s.\-()]*\d[\s.\-()]*(?:\d[\s.\-()]*){6,12}(?!\d)/g;
+  // 2. International WITH explicit + sign (e.g. +971 54 453 3584, +1 800 123 4567)
+  //    Excludes +91 (already caught above). Country code 1–3 digits, total 7–15 digits.
+  const RE_INTL_PLUS =
+    /\+(?!91\b)(?!0)[1-9]\d{0,2}[\s.\-()]*(?:\d[\s.\-()]*){6,12}\d(?!\d)/g;
+
+  // 3. International WITHOUT + sign: bare digit strings 11–15 digits long
+  //    that do NOT start with 91/0 (those are already handled as Indian above).
+  //    We require the number to appear as a standalone token (word boundaries).
+  //    This catches e.g. "97154453584" or "12125551234".
+  const RE_INTL_BARE =
+    /(?<!\d)(?!91)(?!0)[1-9]\d{10,14}(?!\d)/g;
 
   let m;
-  while ((m = RE_INDIAN.exec(t)) !== null) tryAdd(m[0]);
-  while ((m = RE_INTL.exec(t))   !== null) tryAdd(m[0]);
+  while ((m = RE_INDIAN.exec(t))     !== null) tryAdd(m[0]);
+  while ((m = RE_INTL_PLUS.exec(t))  !== null) tryAdd(m[0]);
+  while ((m = RE_INTL_BARE.exec(t))  !== null) tryAdd(m[0]);
 
   return result;
 }
