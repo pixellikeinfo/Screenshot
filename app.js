@@ -422,7 +422,20 @@ async function runOCR(file) {
     return [{ file: file.name, name: '', mobile: '', email: globalEmail, upi: globalUPI }];
   }
 
-  return merged.map(r => ({ file: file.name, ...r }));
+  // Remove phantom international numbers: OCR misreads "+91" as "+97"/"+90" etc.
+  // If an intl number's digits CONTAIN a known Indian 10-digit number → it's a phantom.
+  // e.g. "+977736533115" contains "7736533115" → drop. "+9019446624834" contains "9446624834" → drop.
+  const indianSet = new Set(merged.map(r => r.mobile).filter(m => /^\d{10}$/.test(m)));
+  const final = merged.filter(r => {
+    if (!r.mobile.startsWith('+')) return true;
+    const digits = r.mobile.replace(/\D/g, '');
+    for (const ind of indianSet) {
+      if (digits.includes(ind)) return false;
+    }
+    return true;
+  });
+
+  return final.map(r => ({ file: file.name, ...r }));
 }
 
 /* ════════════════════════════════════════════════════════════════════
