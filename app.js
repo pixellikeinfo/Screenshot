@@ -1,5 +1,6 @@
 const imageInput = document.getElementById('imageInput');
 const extractBtn = document.getElementById('extractBtn');
+const toggleDupesBtn = document.getElementById('toggleDupesBtn'); // New button
 const copyBtn = document.getElementById('copyBtn');
 const copyNameBtn = document.getElementById('copyNameBtn');
 const copyMobileBtn = document.getElementById('copyMobileBtn');
@@ -16,10 +17,13 @@ const modalCaption = document.getElementById('modalCaption');
 const closeModalBtn = document.getElementById('closeModalBtn');
 const selectedCountEl = document.getElementById('selectedCount');
 
-const headers = ['File', 'Name', 'Mobile', 'Email', 'UPI ID'];
+const headers = ['Status', 'File', 'Name', 'Mobile', 'Email', 'UPI ID'];
 let extractedRows = [];
 let previewUrls = [];
 let selectedFiles = [];
+let showOnlyUnique = false;
+
+// --- Helper Functions (Restored) ---
 
 function selectedFields() {
   return Array.from(document.querySelectorAll('.field-checkbox:checked')).map((item) => item.value);
@@ -34,11 +38,18 @@ function extractEmail(text) {
 }
 
 function normalizeIndianMobile(rawValue) {
-  const digits = rawValue.replace(/\D/g, '');
-  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
-  if (digits.length === 11 && digits.startsWith('0')) return digits.slice(1);
-  if (digits.length === 10) return digits;
-  return '';
+  // Clean but preserve the '+' if it's there
+  const cleaned = rawValue.replace(/[^\d+]/g, '');
+  const digits = cleaned.replace(/\D/g, '');
+  
+  if (digits.length === 12 && digits.startsWith('91')) {
+      return cleaned.startsWith('+') ? cleaned : '+' + cleaned;
+  }
+  if (digits.length === 10) {
+      // Keep it as is, or optionally add +91 here. We will keep as extracted.
+      return cleaned;
+  }
+  return cleaned;
 }
 
 function extractMobiles(text) {
@@ -47,25 +58,17 @@ function extractMobiles(text) {
     .replace(/[lI|]/g, '1')
     .replace(/[sS]/g, '5')
     .replace(/[bB]/g, '8');
+    
   const uniqueNumbers = new Set();
+  // Regex captures optional +91 and 10 digits starting with 6-9
+  const pattern = /(?:\+91|91)?[6-9]\d{9}\b/g;
+  const matches = normalizedText.match(pattern) || [];
 
-  const addMobile = (value) => {
+  matches.forEach((value) => {
     const normalized = normalizeIndianMobile(value);
-    if (/^[6-9]\d{9}$/.test(normalized)) uniqueNumbers.add(normalized);
-  };
-
-  const formattedMatches = normalizedText.match(/(?:\+?91[\s().,-]*)?[6-9](?:[\s().,-]*\d){9}/g) || [];
-  formattedMatches.forEach((value) => addMobile(value));
-
-  const digitTokens = normalizedText.replace(/[^\d]/g, ' ').split(/\s+/).filter(Boolean);
-  digitTokens.forEach((token) => {
-    if (token.length < 10) return;
-
-    if (token.length <= 12) addMobile(token);
-
-    for (let i = 0; i <= token.length - 10; i += 1) {
-      const candidate = token.slice(i, i + 10);
-      if (/^[6-9]\d{9}$/.test(candidate)) uniqueNumbers.add(candidate);
+    // Ensure it's a valid length (at least 10 digits)
+    if (normalized.replace(/\D/g, '').length >= 10) {
+        uniqueNumbers.add(normalized);
     }
   });
 
@@ -119,7 +122,7 @@ function extractName(text, foundValues) {
 
 function extractNameForMobileLine(lines, lineIndex) {
   const currentLine = normalizeNameText(lines[lineIndex] || '');
-  const withoutNumbers = normalizeNameText(currentLine.replace(/(?:\+?91[\s().,-]*)?[6-9](?:[\s().,-]*\d){9}/g, ''));
+  const withoutNumbers = normalizeNameText(currentLine.replace(/(?:\+?91)?[6-9]\d{9}/g, ''));
 
   if (isLikelyName(withoutNumbers)) {
     return withoutNumbers;
@@ -136,6 +139,7 @@ function extractNameForMobileLine(lines, lineIndex) {
 
 function objectToOrderedRow(data) {
   return {
+    Status: data.status || 'Unique',
     File: data.file,
     Name: data.name,
     Mobile: data.mobile,
@@ -151,11 +155,31 @@ function showStatus(message, isError = false) {
 
 function renderTable(rows) {
   tableBody.innerHTML = '';
-  for (const row of rows) {
+  
+  // Logic to flag duplicates based on 10-digit core
+  const seen = new Set();
+  rows.forEach(row => {
+      const core = row.mobile.replace(/\D/g, '').slice(-10);
+      if (core && seen.has(core)) {
+          row.status = 'Duplicate';
+      } else if (core) {
+          row.status = 'Unique';
+          seen.add(core);
+      } else {
+          row.status = 'N/A';
+      }
+  });
+
+  const displayRows = showOnlyUnique ? rows.filter(r => r.status !== 'Duplicate') : rows;
+
+  for (const row of displayRows) {
     const tr = document.createElement('tr');
+    if (row.status === 'Duplicate') tr.style.backgroundColor = '#fffbeb';
+    
     headers.forEach((key) => {
       const td = document.createElement('td');
-      td.textContent = row[key] || '';
+      const dataKey = key === 'UPI ID' ? 'upi' : key.toLowerCase();
+      td.textContent = row[dataKey] || '';
       tr.appendChild(td);
     });
     tableBody.appendChild(tr);
@@ -166,7 +190,7 @@ function toTSV(rows) {
   const escaped = (value) => (value ?? '').toString().replace(/\t/g, ' ').replace(/\n/g, ' ');
   const lines = [headers.join('\t')];
   rows.forEach((row) => {
-    lines.push(headers.map((key) => escaped(row[key])).join('\t'));
+    lines.push(headers.map((key) => escaped(row[key === 'UPI ID' ? 'upi' : key.toLowerCase()])).join('\t'));
   });
   return lines.join('\n');
 }
@@ -182,7 +206,7 @@ function toCSV(rows) {
 
   const lines = [headers.join(',')];
   rows.forEach((row) => {
-    lines.push(headers.map((key) => escapeCsv(row[key])).join(','));
+    lines.push(headers.map((key) => escapeCsv(row[key === 'UPI ID' ? 'upi' : key.toLowerCase()])).join(','));
   });
   return lines.join('\n');
 }
@@ -198,21 +222,17 @@ function downloadFile(content, fileName, mimeType) {
 }
 
 function getOrderedRows() {
-  return extractedRows.map(objectToOrderedRow);
+  return extractedRows; // Status is handled in renderTable
 }
 
 function enableActions(enabled) {
-  copyBtn.disabled = !enabled;
-  copyNameBtn.disabled = !enabled;
-  copyMobileBtn.disabled = !enabled;
-  copyEmailBtn.disabled = !enabled;
-  copyUpiBtn.disabled = !enabled;
-  downloadCsvBtn.disabled = !enabled;
-  downloadXlsxBtn.disabled = !enabled;
+  const actionBtns = [copyBtn, toggleDupesBtn, copyNameBtn, copyMobileBtn, copyEmailBtn, copyUpiBtn, downloadCsvBtn, downloadXlsxBtn];
+  actionBtns.forEach(btn => btn.disabled = !enabled);
 }
 
 function applyFieldSelection(record, fields) {
   return {
+    status: record.status,
     file: record.file,
     name: fields.includes('name') ? record.name : '',
     mobile: fields.includes('mobile') ? record.mobile : '',
@@ -280,7 +300,6 @@ function renderPreviews(files) {
     removeBtn.type = 'button';
     removeBtn.className = 'preview-remove-btn';
     removeBtn.textContent = '✕';
-    removeBtn.setAttribute('aria-label', `Remove ${file.name}`);
     removeBtn.addEventListener('click', (event) => {
       event.stopPropagation();
       removeSelectedFile(file);
@@ -348,57 +367,39 @@ function copyColumn(headerKey, label) {
     .then(() => showStatus(`Copied ${label} column.`))
     .catch((error) => {
       console.error(error);
-      showStatus('Copy failed. Your browser may block clipboard permission.', true);
+      showStatus('Copy failed.', true);
     });
 }
 
 async function runOCR(file) {
-  const {
-    data: { text: primaryText },
-  } = await Tesseract.recognize(file, 'eng');
+  const { data: { text: primaryText } } = await Tesseract.recognize(file, 'eng');
 
   let processedText = '';
   const processedBlob = await preprocessImageForOCR(file);
   if (processedBlob) {
     try {
-      const {
-        data: { text },
-      } = await Tesseract.recognize(processedBlob, 'eng');
+      const { data: { text } } = await Tesseract.recognize(processedBlob, 'eng');
       processedText = text;
-    } catch (error) {
-      console.error('Second OCR pass failed:', error);
-    }
+    } catch (error) { console.error('Second OCR failed'); }
   }
 
-  const mergedText = `${primaryText}\n${processedText}`;
-  const email = extractEmail(mergedText);
-  const upi = extractUPI(mergedText);
-
-  const linePool = mergedText
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-
-  const mobiles = extractMobiles(mergedText);
-  const fallbackName = extractName(mergedText, { email, upi });
+  const combinedText = primaryText + '\n' + processedText;
+  const mobiles = extractMobiles(combinedText);
+  const email = extractEmail(combinedText);
+  const upi = extractUPI(combinedText);
+  const linePool = combinedText.split(/\r?\n/).filter(Boolean);
+  const fallbackName = extractName(combinedText, { email, upi });
 
   if (!mobiles.length) {
-    return [
-      {
-        file: file.name,
-        name: fallbackName || 'Name not found',
-        mobile: '',
-        email,
-        upi,
-      },
-    ];
+    return [{ status: '', file: file.name, name: fallbackName || 'Name not found', mobile: '', email, upi }];
   }
 
   return mobiles.map((mobile) => {
-    const lineIndex = linePool.findIndex((line) => extractMobiles(line).includes(mobile));
+    const lineIndex = linePool.findIndex((line) => line.includes(mobile));
     const mappedName = lineIndex >= 0 ? extractNameForMobileLine(linePool, lineIndex) : '';
 
     return {
+      status: '',
       file: file.name,
       name: mappedName || fallbackName || 'Name not found',
       mobile,
@@ -407,6 +408,8 @@ async function runOCR(file) {
     };
   });
 }
+
+// --- Event Listeners (Restored) ---
 
 imageInput.addEventListener('change', () => {
   const files = Array.from(imageInput.files || []);
@@ -436,15 +439,8 @@ extractBtn.addEventListener('click', async () => {
   const files = selectedFiles;
   const fields = selectedFields();
 
-  if (!files.length) {
-    showStatus('Please upload at least one screenshot.', true);
-    return;
-  }
-
-  if (!fields.length) {
-    showStatus('Please select at least one field to extract.', true);
-    return;
-  }
+  if (!files.length) return showStatus('Please upload screenshots.', true);
+  if (!fields.length) return showStatus('Please select fields.', true);
 
   extractBtn.disabled = true;
   enableActions(false);
@@ -455,53 +451,43 @@ extractBtn.addEventListener('click', async () => {
     for (let i = 0; i < files.length; i += 1) {
       showStatus(`Processing ${i + 1}/${files.length}: ${files[i].name}`);
       const results = await runOCR(files[i]);
-      results
-        .filter((result) => !fields.includes('mobile') || result.mobile)
-        .forEach((result) => extractedRows.push(applyFieldSelection(result, fields)));
+      results.forEach((result) => extractedRows.push(applyFieldSelection(result, fields)));
     }
-
-    const orderedRows = getOrderedRows();
-    renderTable(orderedRows);
-    enableActions(orderedRows.length > 0);
-    const mobileCount = orderedRows.filter((row) => row.Mobile).length;
-    showStatus(`Done. Extracted ${orderedRows.length} row(s) with ${mobileCount} mobile number(s).`);
+    renderTable(extractedRows);
+    enableActions(extractedRows.length > 0);
+    showStatus(`Done. Extracted ${extractedRows.length} rows.`);
   } catch (error) {
-    console.error(error);
-    showStatus('Extraction failed. Please try with clearer screenshots.', true);
+    showStatus('Extraction failed.', true);
   } finally {
     extractBtn.disabled = false;
   }
 });
 
-copyBtn.addEventListener('click', async () => {
-  const orderedRows = getOrderedRows();
-  if (!orderedRows.length) return;
-
-  try {
-    await navigator.clipboard.writeText(toTSV(orderedRows));
-    showStatus('Copied all columns in sheet-friendly format. Paste into Google Sheets or Excel.');
-  } catch (error) {
-    console.error(error);
-    showStatus('Copy failed. Your browser may block clipboard permission.', true);
-  }
+toggleDupesBtn.addEventListener('click', () => {
+    showOnlyUnique = !showOnlyUnique;
+    toggleDupesBtn.textContent = showOnlyUnique ? 'Show All' : 'Hide Duplicates';
+    renderTable(extractedRows);
 });
 
-copyNameBtn.addEventListener('click', () => copyColumn('Name', 'Name'));
-copyMobileBtn.addEventListener('click', () => copyColumn('Mobile', 'Mobile'));
-copyEmailBtn.addEventListener('click', () => copyColumn('Email', 'Email'));
-copyUpiBtn.addEventListener('click', () => copyColumn('UPI ID', 'UPI ID'));
+copyBtn.addEventListener('click', async () => {
+  if (!extractedRows.length) return;
+  await navigator.clipboard.writeText(toTSV(extractedRows));
+  showStatus('Copied all columns.');
+});
+
+copyNameBtn.addEventListener('click', () => copyColumn('name', 'Name'));
+copyMobileBtn.addEventListener('click', () => copyColumn('mobile', 'Mobile'));
+copyEmailBtn.addEventListener('click', () => copyColumn('email', 'Email'));
+copyUpiBtn.addEventListener('click', () => copyColumn('upi', 'UPI ID'));
 
 downloadCsvBtn.addEventListener('click', () => {
-  const orderedRows = getOrderedRows();
-  if (!orderedRows.length) return;
-  downloadFile(toCSV(orderedRows), 'extracted_data.csv', 'text/csv;charset=utf-8');
+  if (!extractedRows.length) return;
+  downloadFile(toCSV(extractedRows), 'extracted_data.csv', 'text/csv');
 });
 
 downloadXlsxBtn.addEventListener('click', () => {
-  const orderedRows = getOrderedRows();
-  if (!orderedRows.length) return;
-
-  const worksheet = XLSX.utils.json_to_sheet(orderedRows, { header: headers });
+  if (!extractedRows.length) return;
+  const worksheet = XLSX.utils.json_to_sheet(extractedRows);
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'ExtractedData');
   XLSX.writeFile(workbook, 'extracted_data.xlsx');
