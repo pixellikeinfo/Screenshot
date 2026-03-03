@@ -1,6 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    Screenshot Data Extractor – app.js
-   Simple rule: read number exactly as shown, find name above it.
+   Uses Google Gemini 1.5 Flash Vision API (1500 free/day)
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── DOM refs ──────────────────────────────────────────────────────── */
@@ -25,6 +25,10 @@ const selectedCountEl  = document.getElementById('selectedCount');
 const dupModal         = document.getElementById('dupModal');
 const dupModalBody     = document.getElementById('dupModalBody');
 const closeDupModalBtn = document.getElementById('closeDupModalBtn');
+const apiKeyInput      = document.getElementById('apiKeyInput');
+const saveKeyBtn       = document.getElementById('saveKeyBtn');
+const clearKeyBtn      = document.getElementById('clearKeyBtn');
+const apiKeyStatus     = document.getElementById('apiKeyStatus');
 
 const HEADERS = ['File', 'Name', 'Mobile', 'Email', 'UPI ID'];
 let extractedRows = [];
@@ -32,192 +36,49 @@ let previewUrls   = [];
 let selectedFiles = [];
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 1 – READ PHONE NUMBERS EXACTLY AS SHOWN
+   SECTION 1 – API KEY MANAGEMENT
+   Key stored in browser localStorage only — never in any file
    ════════════════════════════════════════════════════════════════════ */
 
-/**
- * Find all phone numbers in a line of text.
- * Returns them EXACTLY as they appear (spaces removed for cleanliness).
- * Handles:
- *   +91 97467 68963  →  +917746768963  (keeps +91)
- *   +971 54 453 3584 →  +971544533584  (keeps any country code)
- *   9746768963       →  9746768963     (bare number)
- */
-function findPhonesInLine(line) {
-  const phones = [];
-  const seen = new Set();
-
-  const RE = /(\+\d{1,3}[\s\-]?)?\d[\d\s\-]{7,}/g;
-
-  let m;
-  while ((m = RE.exec(line)) !== null) {
-    const raw = m[0].trim();
-    let cleaned = raw.startsWith('+')
-      ? '+' + raw.slice(1).replace(/[\s\-]/g, '')
-      : raw.replace(/[\s\-]/g, '');
-
-    // Fix OCR misread: dark backgrounds cause +91 to be read as +97/+90/+92 etc.
-    // If number starts with +9X (X != 1), has 12 digits, and last 10 are valid Indian → fix to +91
-    if (cleaned.startsWith('+9') && !cleaned.startsWith('+91')) {
-      const digits = cleaned.replace(/\D/g, '');
-      if (digits.length === 12) {
-        const last10 = digits.slice(2);
-        if (/^[6-9]\d{9}$/.test(last10)) {
-          cleaned = '+91' + last10;
-        }
-      }
-    }
-
-    const digitCount = cleaned.replace(/\D/g, '').length;
-    if (digitCount < 7 || digitCount > 15) continue;
-    if (seen.has(cleaned)) continue;
-    seen.add(cleaned);
-    phones.push(cleaned);
-  }
-
-  return phones;
+function getApiKey() {
+  return localStorage.getItem('gemini_api_key') || apiKeyInput.value.trim();
 }
 
+// Load saved key on page open
+(function loadSavedKey() {
+  const saved = localStorage.getItem('gemini_api_key');
+  if (saved) {
+    apiKeyInput.value = saved;
+    apiKeyStatus.textContent = '✅ API key loaded.';
+    apiKeyStatus.style.color = 'green';
+  }
+})();
+
+saveKeyBtn.addEventListener('click', () => {
+  const key = apiKeyInput.value.trim();
+  if (!key.startsWith('AIza')) {
+    apiKeyStatus.textContent = '❌ Invalid key — Gemini keys start with "AIza"';
+    apiKeyStatus.style.color = '#b91c1c';
+    return;
+  }
+  localStorage.setItem('gemini_api_key', key);
+  apiKeyStatus.textContent = '✅ Key saved in your browser only. Never shared.';
+  apiKeyStatus.style.color = 'green';
+});
+
+clearKeyBtn.addEventListener('click', () => {
+  localStorage.removeItem('gemini_api_key');
+  apiKeyInput.value = '';
+  apiKeyStatus.textContent = 'Key cleared.';
+  apiKeyStatus.style.color = '#64748b';
+});
+
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 2 – NAME UTILITIES
+   SECTION 2 – GEMINI VISION API
+   Model: gemini-1.5-flash  →  1,500 requests/day FREE
    ════════════════════════════════════════════════════════════════════ */
 
 function cleanStr(v) { return (v || '').replace(/\s+/g, ' ').trim(); }
-
-/** Words that are UI chrome, not names */
-const SKIP_WORDS = new Set([
-  'search', 'mobile', 'add', 'view', 'contacts', 'view contacts',
-  'lte', '5g', '4g', 'cancel', 'done', 'ok', 'back',
-]);
-
-function isSkipWord(s) {
-  return SKIP_WORDS.has(s.toLowerCase().trim());
-}
-
-/**
- * Clean a line to get a name candidate:
- * - Remove the ~ prefix WhatsApp adds
- * - Remove known UI words
- * - Remove non-name characters
- */
-function toNameCandidate(line) {
-  let s = line
-    .replace(/^[\s~\-_*•]+/, '')       // strip leading ~ decorator
-    .replace(/[\s~\-_*•]+$/, '')       // strip trailing decorator
-    .replace(/\bmobile\b/gi, '')
-    .replace(/\badd\b/gi, '')
-    .replace(/\bview\s*contacts\b/gi, '')
-    .replace(/\bsearch\b/gi, '')
-    .replace(/[^a-zA-Z0-9\s.'\-]/g, ' ')
-    .replace(/\s{2,}/g, ' ')
-    .trim();
-
-  // Strip leading OCR noise: single/double digit prefix OR 1-3 char token (all-caps or lowercase)
-  // e.g. "1 Name" → "Name", "TTA Name" → "Name", "ws Name" → "Name"
-  s = s.replace(/^(\d{1,2}|[A-Za-z]{1,3})\s+(?=[A-Z])/, '').trim();
-
-  return s;
-}
-
-/**
- * Is this a plausible person name?
- */
-function isName(s) {
-  if (!s || s.length < 2 || s.length > 60) return false;
-  if (isSkipWord(s)) return false;
-  if (/^[\d\s.\-+()]+$/.test(s)) return false;  // purely numbers
-  if (/[@:/\\]/.test(s)) return false;
-  const letters = (s.match(/[a-zA-Z]/g) || []).length;
-  if (letters < 2) return false;
-  return true;
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   SECTION 3 – EMAIL / UPI
-   ════════════════════════════════════════════════════════════════════ */
-
-function extractEmail(text) {
-  const m = text.match(/[A-Z0-9._%+\-]+@[A-Z0-9.\-]+\.[A-Z]{2,}/i);
-  return m ? cleanStr(m[0]) : '';
-}
-
-function extractUPI(text) {
-  const m = text.match(/\b[\w.\-]{2,}@[a-zA-Z]{2,9}\b/);
-  if (!m) return '';
-  const val = cleanStr(m[0]);
-  if (/\.[a-zA-Z]{2,}$/.test(val.split('@')[1] || '')) return '';
-  return val;
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   SECTION 4 – PARSE CONTACTS FROM OCR TEXT
-   Simple approach: go line by line.
-   When a phone number line is found, look at the lines just above it for a name.
-   ════════════════════════════════════════════════════════════════════ */
-
-function parseContacts(text, globalEmail, globalUPI) {
-  const lines      = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const linePhones = lines.map(l => findPhonesInLine(l));
-
-  const usedPhones = new Set();
-  const records    = [];
-
-  for (let i = 0; i < lines.length; i++) {
-    const phones = linePhones[i];
-    if (!phones.length) continue;
-
-    for (const phone of phones) {
-      if (usedPhones.has(phone)) continue;
-      usedPhones.add(phone);
-
-      let name = '';
-
-      // Look backward up to 3 lines for a name (stop at another phone line)
-      for (let off = 1; off <= 3 && !name; off++) {
-        const idx = i - off;
-        if (idx < 0) break;
-        if (linePhones[idx].length > 0) break;  // hit another number line → stop
-        const cand = toNameCandidate(lines[idx]);
-        if (isName(cand)) name = cand;
-      }
-
-      // Same line: strip the number and check what's left
-      if (!name) {
-        const rest = lines[i].replace(/(\+\d{1,3}[\s\-]?)?\d[\d\s\-]{7,}/g, '').trim();
-        const cand = toNameCandidate(rest);
-        if (isName(cand)) name = cand;
-      }
-
-      // Look forward up to 1 line (last resort)
-      if (!name) {
-        const idx = i + 1;
-        if (idx < lines.length && linePhones[idx].length === 0) {
-          const cand = toNameCandidate(lines[idx]);
-          if (isName(cand)) name = cand;
-        }
-      }
-
-      records.push({
-        name:   cleanStr(name),
-        mobile: cleanStr(phone),
-        email:  cleanStr(globalEmail),
-        upi:    cleanStr(globalUPI),
-      });
-    }
-  }
-
-  return records;
-}
-
-/* ════════════════════════════════════════════════════════════════════
-   SECTION 5 – GEMINI VISION API
-   Free tier: 1,500 requests/day with Gemini 1.5 Flash
-   Reads images like a human — exact numbers, exact names, zero misreads
-   ════════════════════════════════════════════════════════════════════ */
-
-// Paste your free Gemini API key here
-// Get it free at: https://aistudio.google.com/app/apikey
-const GEMINI_API_KEY = 'AIzaSyBwaeuZw9VtB31VD4aIbckfYZTPcdJM1Og';
 
 async function fileToBase64(file) {
   return new Promise((resolve, reject) => {
@@ -229,8 +90,9 @@ async function fileToBase64(file) {
 }
 
 async function runOCR(file) {
-  if (!GEMINI_API_KEY || GEMINI_API_KEY === 'YOUR_GEMINI_API_KEY_HERE') {
-    showStatus('⚠️ Please add your Gemini API key in app.js (line with GEMINI_API_KEY)', true);
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    showStatus('⚠️ Please enter your Gemini API key above and click Save.', true);
     return [{ file: file.name, name: '', mobile: '', email: '', upi: '' }];
   }
 
@@ -246,7 +108,7 @@ async function runOCR(file) {
   const prompt = `Look at this screenshot carefully. It shows a list of contacts or phone numbers.
 
 Your job:
-1. Find EVERY phone number visible — read each digit EXACTLY as it appears on screen.
+1. Find EVERY phone number visible — read each digit EXACTLY as shown on screen.
 2. For each number, find its associated name (shown just above or beside the number). If no name, leave it blank.
 3. Also extract any email address or UPI ID if visible.
 
@@ -257,15 +119,16 @@ Return ONLY a raw JSON array — no explanation, no markdown, no code fences. Ex
 ]
 
 Rules:
-- Copy each number EXACTLY as shown including the country code (e.g. +91, +971)
+- Copy each number EXACTLY as shown including country code (e.g. +91, +971)
 - Remove spaces within the number but keep the + sign
-- If no country code is shown, write the number as-is
-- Do NOT change, guess or correct any digit
-- Name should be copied exactly as shown
+- If no country code shown, write the number as-is
+- Do NOT change or guess any digit
+- Copy the name exactly as shown
 - If nothing found, return []`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+    // CORRECT model name: gemini-1.5-flash (NOT gemini-1.5-flash-latest)
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
     const response = await fetch(url, {
       method: 'POST',
@@ -288,9 +151,16 @@ Rules:
       throw new Error(msg);
     }
 
-    const raw = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    const raw   = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
     const clean = raw.replace(/```json|```/g, '').trim();
-    const parsed = JSON.parse(clean);
+
+    let parsed;
+    try {
+      parsed = JSON.parse(clean);
+    } catch (e) {
+      console.error('JSON parse failed:', clean);
+      throw new Error('Gemini returned unexpected response format');
+    }
 
     if (!Array.isArray(parsed) || !parsed.length) {
       return [{ file: file.name, name: '', mobile: '', email: '', upi: '' }];
@@ -312,7 +182,7 @@ Rules:
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 7 – TABLE / EXPORT HELPERS
+   SECTION 3 – TABLE / EXPORT HELPERS
    ════════════════════════════════════════════════════════════════════ */
 
 function selectedFields() {
@@ -398,7 +268,7 @@ function copyColumn(headerKey, label) {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 8 – FILE SELECTION & PREVIEWS
+   SECTION 4 – FILE SELECTION & PREVIEWS
    ════════════════════════════════════════════════════════════════════ */
 
 function fileKey(file) { return `${file.name}__${file.size}__${file.lastModified}`; }
@@ -458,7 +328,7 @@ function closePreviewModal() {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 9 – DUPLICATE MODAL
+   SECTION 5 – DUPLICATE MODAL
    ════════════════════════════════════════════════════════════════════ */
 
 function showDuplicates() {
@@ -483,7 +353,7 @@ function showDuplicates() {
 function closeDupModal() { dupModal.hidden = true; }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 10 – EVENT LISTENERS
+   SECTION 6 – EVENT LISTENERS
    ════════════════════════════════════════════════════════════════════ */
 
 imageInput.addEventListener('change', () => {
