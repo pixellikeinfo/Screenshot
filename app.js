@@ -230,6 +230,12 @@ function renderPreviews(files) {
   });
 }
 
+function closePreviewModal() {
+  imageModal.hidden = true;
+  modalImage.removeAttribute('src');
+  modalCaption.textContent = '';
+}
+
 function copyColumn(headerKey, label) {
   const rows = getOrderedRows();
   const values = rows.map((row) => row[headerKey] || '').join('\n');
@@ -289,12 +295,18 @@ imageInput.addEventListener('change', () => {
 });
 
 closeModalBtn.addEventListener('click', () => {
-  imageModal.hidden = true;
+  closePreviewModal();
 });
 
 imageModal.addEventListener('click', (event) => {
   if (event.target === imageModal) {
-    imageModal.hidden = true;
+    closePreviewModal();
+  }
+});
+
+document.addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && !imageModal.hidden) {
+    closePreviewModal();
   }
 });
 
