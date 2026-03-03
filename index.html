@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Screenshot Data Extractor</title>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://js.puter.com/v2/"></script>
   <style>
     :root { font-family: 'Segoe UI', Arial, sans-serif; color-scheme: light; }
     * { box-sizing: border-box; }
@@ -202,20 +203,14 @@
     <p class="subtitle">Extract contacts from WhatsApp screenshots using Google Gemini AI — 1,500 images/day free.</p>
   </header>
 
-  <!-- API Key -->
-  <section class="panel">
-    <h2>🔑 Gemini API Key</h2>
-    <p class="hint">
-      Get your free key at <a href="https://aistudio.google.com/app/apikey" target="_blank">aistudio.google.com/app/apikey</a>
-      &nbsp;·&nbsp; Uses <strong>Gemini 2.5 Flash-Lite</strong> &nbsp;·&nbsp; 1,000 images/day free
-      &nbsp;·&nbsp; Key saved in your browser only, never shared.
+  <!-- Puter login info -->
+  <section class="panel" style="background:#f0fdf4; border-color:#86efac;">
+    <h2>✅ Free — No API Key Needed</h2>
+    <p class="hint" style="color:#166534;">
+      This app uses <strong>Puter.js</strong> with Google Gemini 2.5 Flash vision AI.<br/>
+      First time only: a <strong>free Puter account login</strong> will pop up — just sign in with Google.
+      After that it works completely free with no limits.
     </p>
-    <div class="api-key-row">
-      <input id="apiKeyInput" type="password" placeholder="Paste your Gemini API key here  (AIzaSy...)" autocomplete="off" />
-      <button id="saveKeyBtn">Save Key</button>
-      <button id="clearKeyBtn" class="btn-secondary">Clear</button>
-    </div>
-    <p id="apiKeyStatus"></p>
   </section>
 
   <!-- Upload -->
@@ -314,36 +309,15 @@ const selectedCountEl  = document.getElementById('selectedCount');
 const dupModal         = document.getElementById('dupModal');
 const dupModalBody     = document.getElementById('dupModalBody');
 const closeDupModalBtn = document.getElementById('closeDupModalBtn');
-const apiKeyInput      = document.getElementById('apiKeyInput');
-const saveKeyBtn       = document.getElementById('saveKeyBtn');
-const clearKeyBtn      = document.getElementById('clearKeyBtn');
-const apiKeyStatus     = document.getElementById('apiKeyStatus');
+const apiKeyInput      = null; // removed - no API key needed
+const saveKeyBtn       = null; // removed
+const clearKeyBtn      = null; // removed
+const apiKeyStatus     = null; // removed
 
 const HEADERS = ['File','Name','Mobile','Email','UPI ID'];
 let extractedRows = [], previewUrls = [], selectedFiles = [];
 
-/* ── API Key ── */
-function getApiKey() {
-  return localStorage.getItem('gemini_api_key') || apiKeyInput.value.trim();
-}
-(function() {
-  const k = localStorage.getItem('gemini_api_key');
-  if (k) { apiKeyInput.value = k; setKeyStatus('✅ API key loaded.', 'green'); }
-})();
-function setKeyStatus(msg, color) {
-  apiKeyStatus.textContent = msg; apiKeyStatus.style.color = color;
-}
-saveKeyBtn.addEventListener('click', () => {
-  const k = apiKeyInput.value.trim();
-  if (!k.startsWith('AIza')) { setKeyStatus('❌ Invalid key — must start with "AIza"', '#b91c1c'); return; }
-  localStorage.setItem('gemini_api_key', k);
-  setKeyStatus('✅ Key saved in your browser. Never shared.', 'green');
-});
-clearKeyBtn.addEventListener('click', () => {
-  localStorage.removeItem('gemini_api_key');
-  apiKeyInput.value = '';
-  setKeyStatus('Key cleared.', '#64748b');
-});
+/* ── No API key needed - uses Puter.js ── */
 
 /* ── Helpers ── */
 function cleanStr(v) { return (v||'').replace(/\s+/g,' ').trim(); }
@@ -356,26 +330,8 @@ function enableActions(on) {
    downloadCsvBtn,downloadXlsxBtn,checkDupBtn].forEach(b => b.disabled = !on);
 }
 
-/* ── Gemini API ── */
-async function fileToBase64(file) {
-  return new Promise((res, rej) => {
-    const r = new FileReader();
-    r.onload  = () => res(r.result.split(',')[1]);
-    r.onerror = () => rej(new Error('File read failed'));
-    r.readAsDataURL(file);
-  });
-}
-
+/* ── Puter.js AI — Free, no API key needed ── */
 async function runOCR(file) {
-  const apiKey = getApiKey();
-  if (!apiKey) {
-    showStatus('⚠️ Please enter your Gemini API key and click Save.', true);
-    return [{ file: file.name, name:'', mobile:'', email:'', upi:'' }];
-  }
-
-  const base64   = await fileToBase64(file);
-  const mimeType = file.type || 'image/jpeg';
-
   const prompt = `Look at this screenshot carefully. It shows a list of contacts or phone numbers.
 
 Your job:
@@ -398,23 +354,11 @@ Rules:
 - If nothing found, return []`;
 
   try {
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent?key=${apiKey}`;
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ parts: [
-          { inline_data: { mime_type: mimeType, data: base64 } },
-          { text: prompt }
-        ]}],
-        generationConfig: { temperature: 0, maxOutputTokens: 2048 }
-      })
-    });
-
-    const data = await res.json();
-    if (!res.ok) throw new Error(data.error?.message || 'Gemini API error');
-
-    const raw   = data.candidates?.[0]?.content?.parts?.[0]?.text || '[]';
+    // Pass file directly to puter.ai.chat — official Puter docs syntax
+    const response = await puter.ai.chat(prompt, file, { model: 'gemini-2.5-flash' });
+    const raw = typeof response === 'string'
+      ? response
+      : (response?.message?.content?.[0]?.text || response?.message?.content || '[]');
     const clean = raw.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
 
@@ -429,7 +373,7 @@ Rules:
       upi:    cleanStr(r.upi    || ''),
     }));
   } catch(err) {
-    console.error('Gemini error:', err);
+    console.error('Puter error:', err);
     showStatus(`❌ Error: ${err.message}`, true);
     return [{ file: file.name, name:'', mobile:'', email:'', upi:'' }];
   }
