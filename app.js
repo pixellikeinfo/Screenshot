@@ -1,5 +1,6 @@
 /* ═══════════════════════════════════════════════════════════════════
    Screenshot Data Extractor – app.js
+   Simple rule: read number exactly as shown, find name above it.
    ═══════════════════════════════════════════════════════════════════ */
 
 /* ── DOM refs ──────────────────────────────────────────────────────── */
@@ -31,112 +32,99 @@ let previewUrls   = [];
 let selectedFiles = [];
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 1 – PHONE NUMBER UTILITIES
+   SECTION 1 – READ PHONE NUMBERS EXACTLY AS SHOWN
+   ════════════════════════════════════════════════════════════════════ */
+
+/**
+ * Find all phone numbers in a line of text.
+ * Returns them EXACTLY as they appear (spaces removed for cleanliness).
+ * Handles:
+ *   +91 97467 68963  →  +917746768963  (keeps +91)
+ *   +971 54 453 3584 →  +971544533584  (keeps any country code)
+ *   9746768963       →  9746768963     (bare number)
+ */
+function findPhonesInLine(line) {
+  const phones = [];
+  const seen = new Set();
+
+  // Match: optional + and country code, then digit groups separated by spaces/dashes
+  // This single pattern catches all formats
+  const RE = /(\+\d{1,3}[\s\-]?)?\d[\d\s\-]{7,}/g;
+
+  let m;
+  while ((m = RE.exec(line)) !== null) {
+    // Strip all spaces and dashes to get clean digits (keep + prefix)
+    const raw = m[0].trim();
+    const cleaned = raw.startsWith('+')
+      ? '+' + raw.slice(1).replace(/[\s\-]/g, '')
+      : raw.replace(/[\s\-]/g, '');
+
+    // Must have at least 7 digits to be a phone number
+    const digitCount = cleaned.replace(/\D/g, '').length;
+    if (digitCount < 7 || digitCount > 15) continue;
+    if (seen.has(cleaned)) continue;
+    seen.add(cleaned);
+    phones.push(cleaned);
+  }
+
+  return phones;
+}
+
+/* ════════════════════════════════════════════════════════════════════
+   SECTION 2 – NAME UTILITIES
    ════════════════════════════════════════════════════════════════════ */
 
 function cleanStr(v) { return (v || '').replace(/\s+/g, ' ').trim(); }
 
-/**
- * Apply conservative OCR character fixes ONLY in digit context.
- * We do NOT replace 9→9, 7→7 etc. — only clearly wrong substitutions.
- */
-function fixOCRDigits(text) {
-  return text
-    .replace(/(?<=\d\s*)[oO](?=\s*\d)/g, '0')   // O between digits → 0
-    .replace(/[lI|](?=\d)/g, '1')                 // l/I/| before digit → 1
-    .replace(/(?<=\d)[lI|]/g, '1');               // l/I/| after digit → 1
+/** Words that are UI chrome, not names */
+const SKIP_WORDS = new Set([
+  'search', 'mobile', 'add', 'view', 'contacts', 'view contacts',
+  'lte', '5g', '4g', 'cancel', 'done', 'ok', 'back',
+]);
+
+function isSkipWord(s) {
+  return SKIP_WORDS.has(s.toLowerCase().trim());
 }
 
 /**
- * Given a raw matched phone string, return a canonical phone:
- *   Indian (+91/91/0 or bare 10-digit [6-9]xxx) → plain 10 digits
- *   True international (explicit + with non-91 code) → "+<digits>"
- *   Invalid → ""
- *
- * KEY RULE: We ONLY store international numbers when the input actually
- * had a '+' sign in it. This prevents OCR misreads like "+97" (should be
- * "+91") from generating fake international numbers.
+ * Clean a line to get a name candidate:
+ * - Remove the ~ prefix WhatsApp adds
+ * - Remove known UI words
+ * - Remove non-name characters
  */
-function canonicalPhone(raw, hadPlusSign) {
-  const digits = raw.replace(/\D/g, '');
+function toNameCandidate(line) {
+  let s = line
+    .replace(/^[\s~\-_*•]+/, '')       // strip leading ~ decorator
+    .replace(/[\s~\-_*•]+$/, '')       // strip trailing decorator
+    .replace(/\bmobile\b/gi, '')
+    .replace(/\badd\b/gi, '')
+    .replace(/\bview\s*contacts\b/gi, '')
+    .replace(/\bsearch\b/gi, '')
+    .replace(/[^a-zA-Z0-9\s.'\-]/g, ' ')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
 
-  // ── Indian: +91 or 91 prefix (12 digits)
-  if (digits.length === 12 && digits.startsWith('91')) {
-    const n = digits.slice(2);
-    if (/^[6-9]\d{9}$/.test(n)) return n;
-  }
-  // ── Indian: leading 0 (11 digits)
-  if (digits.length === 11 && digits.startsWith('0')) {
-    const n = digits.slice(1);
-    if (/^[6-9]\d{9}$/.test(n)) return n;
-  }
-  // ── Indian: bare 10 digits starting 6–9
-  if (digits.length === 10 && /^[6-9]\d{9}$/.test(digits)) return digits;
+  // Strip leading single digit or short all-caps OCR noise (e.g. "1 Name", "TTA Name")
+  s = s.replace(/^(\d{1,2}|[A-Z]{1,3})\s+/, '').trim();
 
-  // ── OCR noise recovery: 11 digits, no Indian prefix
-  //    Try dropping first or last digit to recover a valid Indian number
-  if (digits.length === 11 && !digits.startsWith('91') && !digits.startsWith('0')) {
-    const d1 = digits.slice(1);
-    const d2 = digits.slice(0, 10);
-    if (/^[6-9]\d{9}$/.test(d1)) return d1;
-    if (/^[6-9]\d{9}$/.test(d2)) return d2;
-  }
-
-  // ── International: ONLY accept if the original text had a literal '+' sign
-  //    AND the digits don't look like a mangled Indian number (starting 91)
-  //    AND total digits are 7–15
-  if (
-    hadPlusSign &&
-    digits.length >= 7 && digits.length <= 15 &&
-    !digits.startsWith('91') &&
-    !digits.startsWith('0')
-  ) {
-    return '+' + digits;
-  }
-
-  return '';
+  return s;
 }
 
 /**
- * Extract all distinct phone numbers from a text string.
- *
- * Pass 1 – RE_INDIAN: Indian numbers in every format
- * Pass 2 – RE_INTL_PLUS: True international with explicit '+' (NOT +91)
- *
- * NO bare-international pass — too many false positives from OCR noise.
- * NO sliding window — zero phantom numbers.
+ * Is this a plausible person name?
  */
-function phonesFromText(text) {
-  const t = fixOCRDigits(text);
-
-  const seen   = new Set();
-  const result = [];
-
-  const tryAdd = (raw, hadPlus) => {
-    const c = canonicalPhone(raw, hadPlus);
-    if (c && !seen.has(c)) { seen.add(c); result.push(c); }
-  };
-
-  // Pass 1: Indian numbers (+91 / 91 / 0 prefix, or bare 10-digit [6-9]start)
-  // Separators (space, dash, dot, brackets) allowed between every digit.
-  const RE_INDIAN =
-    /(?<!\d)(?:\+\s*91[\s.\-()]*|91[\s.\-()]*|0[\s.\-()]*)?[6-9](?:[\s.\-()]*\d){9}(?!\d)/g;
-
-  // Pass 2: True international – must have literal '+', must NOT be +91
-  // Country code 1-3 digits, then enough digits to make 7-15 total.
-  // The (?!91) ensures +91 numbers are handled by Pass 1 only.
-  const RE_INTL_PLUS =
-    /\+(?!91[\s.\-()])(?!0)[1-9]\d{0,2}[\s.\-()]*(?:\d[\s.\-()]*){5,12}\d(?!\d)/g;
-
-  let m;
-  while ((m = RE_INDIAN.exec(t))    !== null) tryAdd(m[0], false);
-  while ((m = RE_INTL_PLUS.exec(t)) !== null) tryAdd(m[0], true);
-
-  return result;
+function isName(s) {
+  if (!s || s.length < 2 || s.length > 60) return false;
+  if (isSkipWord(s)) return false;
+  if (/^[\d\s.\-+()]+$/.test(s)) return false;  // purely numbers
+  if (/[@:/\\]/.test(s)) return false;
+  const letters = (s.match(/[a-zA-Z]/g) || []).length;
+  if (letters < 2) return false;
+  return true;
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 2 – NAME / EMAIL / UPI UTILITIES
+   SECTION 3 – EMAIL / UPI
    ════════════════════════════════════════════════════════════════════ */
 
 function extractEmail(text) {
@@ -145,143 +133,58 @@ function extractEmail(text) {
 }
 
 function extractUPI(text) {
-  const m = text.match(/\b[\w.\-]{2,256}@[a-zA-Z]{2,9}\b/);
+  const m = text.match(/\b[\w.\-]{2,}@[a-zA-Z]{2,9}\b/);
   if (!m) return '';
   const val = cleanStr(m[0]);
-  // Reject plain emails (domain has a dot-TLD)
   if (/\.[a-zA-Z]{2,}$/.test(val.split('@')[1] || '')) return '';
   return val;
 }
 
-/** Strip WhatsApp "~ " and other decorators from start/end */
-function stripDecorators(s) {
-  return s
-    .replace(/^[\s~\u2022\u00b7*\-_]+/, '')
-    .replace(/[\s~\u2022\u00b7*\-_]+$/, '')
-    .trim();
-}
-
-/**
- * Strip leading noise tokens from a name candidate.
- * Handles cases like:
- *   "1 Jeevan bose33"  → "Jeevan bose33"   (list number prefix)
- *   "TTA Krishnasree"  → "Krishnasree"      (short OCR noise prefix)
- *   "ws Naveen Bethany"→ "Naveen Bethany"   (2-char noise prefix)
- *   "7 Jeswin"         → "Jeswin"           (single digit prefix)
- */
-function stripLeadingNoise(s) {
-  // Remove a leading 1-3 char token that is NOT a real name word:
-  // a token is "noise" if it is: purely digits, OR purely 2-3 uppercase letters
-  // that don't form a real word (common OCR artefacts from buttons/icons)
-  return s.replace(/^(?:\d{1,3}|[A-Z]{1,3})\s+/, '').trim();
-}
-
-/**
- * Full list of UI strings that should NEVER be treated as names.
- * These come from WhatsApp's own UI chrome that OCR picks up.
- */
-const UI_NOISE = [
-  'search', 'mobile', 'add', 'view contacts', 'view', 'contacts',
-  'lte', 'tte', 'tta', 'tts', 'ttk',   // OCR misreads of "Add" button area
-  'ws', 'wss',                            // OCR misreads of "View contacts"
-  'ok', 'no',
-];
-
-function isUINoiseToken(s) {
-  const lower = s.toLowerCase().trim();
-  return UI_NOISE.includes(lower);
-}
-
-/**
- * Is this string plausibly a human name?
- */
-function isLikelyName(raw) {
-  if (!raw) return false;
-  const val = stripDecorators(raw);
-  if (val.length < 2 || val.length > 60) return false;
-  if (/[@:/\\]/.test(val)) return false;
-  if (/^[\d\s.\-+()]+$/.test(val)) return false;       // purely numeric
-  if (isUINoiseToken(val)) return false;                // pure UI noise word
-
-  const letters = (val.match(/[a-zA-Z]/g) || []).length;
-  const digits  = (val.match(/\d/g) || []).length;
-  if (letters < 2) return false;
-  if (digits > letters) return false;
-  if (!val.includes(' ') && val.length > 25) return false;
-  return true;
-}
-
-/**
- * Convert a raw OCR line to a clean name candidate:
- *  - Remove all known UI noise words
- *  - Strip decorators and leading noise tokens
- *  - Normalise whitespace
- */
-function toNameCandidate(line) {
-  let s = line;
-  // Remove known UI noise words (whole word, case-insensitive)
-  s = s.replace(/\bmobile\b/gi, '');
-  s = s.replace(/\badd\b/gi, '');
-  s = s.replace(/\bview\s*contacts\b/gi, '');
-  s = s.replace(/\bsearch\b/gi, '');
-  // Keep only safe name characters
-  s = s.replace(/[^a-zA-Z0-9\s.'\-]/g, ' ');
-  // Strip decorators
-  s = stripDecorators(s);
-  // Normalise spaces
-  s = s.replace(/\s{2,}/g, ' ').trim();
-  // Strip leading noise token (digit or short-caps OCR artefact)
-  s = stripLeadingNoise(s);
-  return s;
-}
-
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 3 – STRUCTURED LINE-PAIR PARSING
+   SECTION 4 – PARSE CONTACTS FROM OCR TEXT
+   Simple approach: go line by line.
+   When a phone number line is found, look at the lines just above it for a name.
    ════════════════════════════════════════════════════════════════════ */
 
-function parseContactsFromText(text, globalEmail, globalUPI) {
-  const rawLines   = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-  const linePhones = rawLines.map(l => phonesFromText(l));
+function parseContacts(text, globalEmail, globalUPI) {
+  const lines      = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+  const linePhones = lines.map(l => findPhonesInLine(l));
 
-  const assignedPhones = new Set();
-  const records        = [];
+  const usedPhones = new Set();
+  const records    = [];
 
-  for (let i = 0; i < rawLines.length; i++) {
+  for (let i = 0; i < lines.length; i++) {
     const phones = linePhones[i];
     if (!phones.length) continue;
 
     for (const phone of phones) {
-      if (assignedPhones.has(phone)) continue;
-      assignedPhones.add(phone);
+      if (usedPhones.has(phone)) continue;
+      usedPhones.add(phone);
 
       let name = '';
 
-      // ── 1. Look BACKWARD up to 4 lines; stop at another phone line
-      for (let off = 1; off <= 4 && !name; off++) {
+      // Look backward up to 3 lines for a name (stop at another phone line)
+      for (let off = 1; off <= 3 && !name; off++) {
         const idx = i - off;
         if (idx < 0) break;
-        if (linePhones[idx].length > 0) break;
-        const cand = toNameCandidate(rawLines[idx]);
-        if (isLikelyName(cand)) name = cand;
+        if (linePhones[idx].length > 0) break;  // hit another number line → stop
+        const cand = toNameCandidate(lines[idx]);
+        if (isName(cand)) name = cand;
       }
 
-      // ── 2. Same-line remainder (strip phone digits and check what's left)
+      // Same line: strip the number and check what's left
       if (!name) {
-        const stripped = rawLines[i]
-          .replace(/(?:\+\s*\d{1,3}[\s.\-()]*)?[6-9](?:[\s.\-()]*\d){9}/g, '')
-          .replace(/\+[\d\s.\-()]{6,}/g, '');
-        const cand = toNameCandidate(stripped);
-        if (isLikelyName(cand)) name = cand;
+        const rest = lines[i].replace(/(\+\d{1,3}[\s\-]?)?\d[\d\s\-]{7,}/g, '').trim();
+        const cand = toNameCandidate(rest);
+        if (isName(cand)) name = cand;
       }
 
-      // ── 3. Look FORWARD up to 2 lines (last resort)
+      // Look forward up to 1 line (last resort)
       if (!name) {
-        for (let off = 1; off <= 2 && !name; off++) {
-          const idx = i + off;
-          if (idx >= rawLines.length) break;
-          if (linePhones[idx].length > 0) break;
-          const cand = toNameCandidate(rawLines[idx]);
-          if (isLikelyName(cand)) name = cand;
+        const idx = i + 1;
+        if (idx < lines.length && linePhones[idx].length === 0) {
+          const cand = toNameCandidate(lines[idx]);
+          if (isName(cand)) name = cand;
         }
       }
 
@@ -298,7 +201,7 @@ function parseContactsFromText(text, globalEmail, globalUPI) {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 4 – IMAGE PRE-PROCESSING
+   SECTION 5 – IMAGE PRE-PROCESSING (4 variants for best OCR)
    ════════════════════════════════════════════════════════════════════ */
 
 async function preprocessImageVariants(file) {
@@ -326,51 +229,42 @@ async function preprocessImageVariants(file) {
     };
 
     // v1 – 2× + threshold 145 (light background)
-    {
-      const c = mkC(2), ctx = c.getContext('2d', { willReadFrequently: true });
+    { const c = mkC(2), ctx = c.getContext('2d', { willReadFrequently: true });
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
       ctx.drawImage(bitmap, 0, 0, c.width, c.height);
       binarise(ctx, c.width, c.height, 145);
-      const b = await toBlob(c); if (b) variants.push(b);
-    }
+      const b = await toBlob(c); if (b) variants.push(b); }
 
-    // v2 – 2× greyscale + contrast (coloured / gradient backgrounds)
-    {
-      const c = mkC(2), ctx = c.getContext('2d', { willReadFrequently: true });
+    // v2 – 2× greyscale + contrast (coloured backgrounds)
+    { const c = mkC(2), ctx = c.getContext('2d', { willReadFrequently: true });
       ctx.filter = 'grayscale(1) contrast(1.5) brightness(1.1)';
       ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-      const b = await toBlob(c); if (b) variants.push(b);
-    }
+      const b = await toBlob(c); if (b) variants.push(b); }
 
-    // v3 – 3× + threshold 128 (small / thin text)
-    {
-      const c = mkC(3), ctx = c.getContext('2d', { willReadFrequently: true });
+    // v3 – 3× + threshold 128 (small text)
+    { const c = mkC(3), ctx = c.getContext('2d', { willReadFrequently: true });
       ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, c.width, c.height);
       ctx.drawImage(bitmap, 0, 0, c.width, c.height);
       binarise(ctx, c.width, c.height, 128);
-      const b = await toBlob(c); if (b) variants.push(b);
-    }
+      const b = await toBlob(c); if (b) variants.push(b); }
 
-    // v4 – 2× INVERTED + threshold (dark-mode / dark-background screenshots)
-    {
-      const c = mkC(2), ctx = c.getContext('2d', { willReadFrequently: true });
+    // v4 – 2× inverted + threshold (dark mode screenshots)
+    { const c = mkC(2), ctx = c.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(bitmap, 0, 0, c.width, c.height);
-      const id = ctx.getImageData(0, 0, c.width, c.height);
-      const d  = id.data;
+      const id = ctx.getImageData(0, 0, c.width, c.height); const d = id.data;
       for (let i = 0; i < d.length; i += 4) {
         d[i] = 255 - d[i]; d[i + 1] = 255 - d[i + 1]; d[i + 2] = 255 - d[i + 2];
       }
       ctx.putImageData(id, 0, 0);
       binarise(ctx, c.width, c.height, 128);
-      const b = await toBlob(c); if (b) variants.push(b);
-    }
+      const b = await toBlob(c); if (b) variants.push(b); }
 
   } catch (err) { console.error('Preprocessing failed:', err); }
   return variants;
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 5 – OCR ORCHESTRATION
+   SECTION 6 – OCR
    ════════════════════════════════════════════════════════════════════ */
 
 async function ocrBlob(blob) {
@@ -379,8 +273,8 @@ async function ocrBlob(blob) {
       tessedit_pageseg_mode: 6,
     });
     return text || '';
-  } catch (err) {
-    console.error('OCR error:', err);
+  } catch (e) {
+    console.error('OCR error:', e);
     return '';
   }
 }
@@ -395,51 +289,25 @@ async function runOCR(file) {
     return [{ file: file.name, name: '', mobile: '', email: '', upi: '' }];
   }
 
-  // Pick the two OCR results with the most phone numbers found
-  const scored = allTexts
-    .map(t => ({ text: t, score: phonesFromText(t).length }))
-    .sort((a, b) => b.score - a.score);
+  // Use the OCR result that found the most phone numbers
+  const best = allTexts
+    .map(t => ({ text: t, score: findPhonesInLine(t.replace(/\n/g, ' ')).length }))
+    .sort((a, b) => b.score - a.score)[0].text;
 
-  const primaryText   = scored[0]?.text || '';
-  const secondaryText = scored[1]?.text || '';
+  const globalEmail = extractEmail(allTexts.join('\n'));
+  const globalUPI   = extractUPI(allTexts.join('\n'));
 
-  // Email/UPI: scan all texts combined
-  const allMerged  = allTexts.join('\n');
-  const globalEmail = extractEmail(allMerged);
-  const globalUPI   = extractUPI(allMerged);
+  const records = parseContacts(best, globalEmail, globalUPI);
 
-  const primaryRecs   = parseContactsFromText(primaryText,   globalEmail, globalUPI);
-  const secondaryRecs = parseContactsFromText(secondaryText, globalEmail, globalUPI);
-
-  // Merge: primary wins; secondary fills missing phones only
-  const seenPhones = new Set(primaryRecs.map(r => r.mobile));
-  const merged     = [...primaryRecs];
-  for (const r of secondaryRecs) {
-    if (!seenPhones.has(r.mobile)) { seenPhones.add(r.mobile); merged.push(r); }
-  }
-
-  if (!merged.length) {
+  if (!records.length) {
     return [{ file: file.name, name: '', mobile: '', email: globalEmail, upi: globalUPI }];
   }
 
-  // Remove phantom international numbers: OCR misreads "+91" as "+97"/"+90" etc.
-  // If an intl number's digits CONTAIN a known Indian 10-digit number → it's a phantom.
-  // e.g. "+977736533115" contains "7736533115" → drop. "+9019446624834" contains "9446624834" → drop.
-  const indianSet = new Set(merged.map(r => r.mobile).filter(m => /^\d{10}$/.test(m)));
-  const final = merged.filter(r => {
-    if (!r.mobile.startsWith('+')) return true;
-    const digits = r.mobile.replace(/\D/g, '');
-    for (const ind of indianSet) {
-      if (digits.includes(ind)) return false;
-    }
-    return true;
-  });
-
-  return final.map(r => ({ file: file.name, ...r }));
+  return records.map(r => ({ file: file.name, ...r }));
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 6 – TABLE / EXPORT / UI HELPERS
+   SECTION 7 – TABLE / EXPORT HELPERS
    ════════════════════════════════════════════════════════════════════ */
 
 function selectedFields() {
@@ -525,7 +393,7 @@ function copyColumn(headerKey, label) {
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 7 – FILE SELECTION & PREVIEWS
+   SECTION 8 – FILE SELECTION & PREVIEWS
    ════════════════════════════════════════════════════════════════════ */
 
 function fileKey(file) { return `${file.name}__${file.size}__${file.lastModified}`; }
@@ -549,8 +417,7 @@ function removeSelectedFile(target) {
 
 function clearPreviews() {
   previewUrls.forEach(url => URL.revokeObjectURL(url));
-  previewUrls = [];
-  previewGrid.innerHTML = '';
+  previewUrls = []; previewGrid.innerHTML = '';
 }
 
 function renderPreviews(files) {
@@ -561,8 +428,7 @@ function renderPreviews(files) {
 
     const card      = document.createElement('div');    card.className = 'preview-card';
     const removeBtn = document.createElement('button'); removeBtn.type = 'button';
-    removeBtn.className = 'preview-remove-btn';
-    removeBtn.textContent = '✕';
+    removeBtn.className = 'preview-remove-btn'; removeBtn.textContent = '✕';
     removeBtn.setAttribute('aria-label', `Remove ${file.name}`);
     removeBtn.addEventListener('click', e => { e.stopPropagation(); removeSelectedFile(file); });
 
@@ -572,9 +438,9 @@ function renderPreviews(files) {
       modalImage.src = url; modalCaption.textContent = file.name; imageModal.hidden = false;
     });
 
-    const img      = document.createElement('img');  img.src = url; img.alt = file.name;
-    const nameSpan = document.createElement('span'); nameSpan.className = 'preview-name';
-    nameSpan.textContent = file.name;
+    const img = document.createElement('img'); img.src = url; img.alt = file.name;
+    const nameSpan = document.createElement('span');
+    nameSpan.className = 'preview-name'; nameSpan.textContent = file.name;
 
     previewBtn.appendChild(img); previewBtn.appendChild(nameSpan);
     card.appendChild(removeBtn); card.appendChild(previewBtn);
@@ -583,25 +449,21 @@ function renderPreviews(files) {
 }
 
 function closePreviewModal() {
-  imageModal.hidden = true;
-  modalImage.removeAttribute('src');
-  modalCaption.textContent = '';
+  imageModal.hidden = true; modalImage.removeAttribute('src'); modalCaption.textContent = '';
 }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 8 – DUPLICATE MODAL
+   SECTION 9 – DUPLICATE MODAL
    ════════════════════════════════════════════════════════════════════ */
 
 function showDuplicates() {
   const rows   = getOrderedRows();
   const dupSet = getDuplicateMobiles(rows);
-
   if (!dupSet.size) {
     dupModalBody.innerHTML = '<p class="no-dup">✅ No duplicate mobile numbers found.</p>';
   } else {
     let html = `<p class="dup-count">${dupSet.size} duplicate number(s) found:</p>
-      <table class="dup-table">
-        <thead><tr><th>Mobile</th><th>Count</th><th>Names</th></tr></thead><tbody>`;
+      <table class="dup-table"><thead><tr><th>Mobile</th><th>Count</th><th>Names</th></tr></thead><tbody>`;
     dupSet.forEach(mobile => {
       const matching = rows.filter(r => r.Mobile === mobile);
       const names    = [...new Set(matching.map(r => r.Name).filter(Boolean))].join(', ');
@@ -616,14 +478,12 @@ function showDuplicates() {
 function closeDupModal() { dupModal.hidden = true; }
 
 /* ════════════════════════════════════════════════════════════════════
-   SECTION 9 – EVENT LISTENERS
+   SECTION 10 – EVENT LISTENERS
    ════════════════════════════════════════════════════════════════════ */
 
 imageInput.addEventListener('change', () => {
   addSelectedFiles(Array.from(imageInput.files || []));
-  renderPreviews(selectedFiles);
-  updateSelectedCount();
-  imageInput.value = '';
+  renderPreviews(selectedFiles); updateSelectedCount(); imageInput.value = '';
 });
 
 closeModalBtn.addEventListener('click', closePreviewModal);
@@ -643,10 +503,7 @@ extractBtn.addEventListener('click', async () => {
   if (!files.length)  { showStatus('Please upload at least one screenshot.', true); return; }
   if (!fields.length) { showStatus('Please select at least one field to extract.', true); return; }
 
-  extractBtn.disabled = true;
-  enableActions(false);
-  extractedRows = [];
-  renderTable([]);
+  extractBtn.disabled = true; enableActions(false); extractedRows = []; renderTable([]);
 
   try {
     for (let i = 0; i < files.length; i++) {
@@ -658,28 +515,21 @@ extractBtn.addEventListener('click', async () => {
     }
 
     const orderedRows = getOrderedRows();
-    renderTable(orderedRows);
-    enableActions(orderedRows.length > 0);
+    renderTable(orderedRows); enableActions(orderedRows.length > 0);
 
     const mobileCount = orderedRows.filter(r => r.Mobile).length;
     const dupSet      = getDuplicateMobiles(orderedRows);
     const dupMsg      = dupSet.size ? `  ⚠️ ${dupSet.size} duplicate(s) detected.` : '';
     showStatus(`Done. ${orderedRows.length} row(s) · ${mobileCount} mobile number(s).${dupMsg}`);
   } catch (err) {
-    console.error(err);
-    showStatus('Extraction failed. Please try with a clearer screenshot.', true);
-  } finally {
-    extractBtn.disabled = false;
-  }
+    console.error(err); showStatus('Extraction failed. Try a clearer screenshot.', true);
+  } finally { extractBtn.disabled = false; }
 });
 
 copyBtn.addEventListener('click', async () => {
-  const rows = getOrderedRows();
-  if (!rows.length) return;
-  try {
-    await navigator.clipboard.writeText(toTSV(rows));
-    showStatus('Copied. Paste into Google Sheets or Excel.');
-  } catch (err) { console.error(err); showStatus('Copy failed.', true); }
+  const rows = getOrderedRows(); if (!rows.length) return;
+  try { await navigator.clipboard.writeText(toTSV(rows)); showStatus('Copied. Paste into Google Sheets or Excel.'); }
+  catch (err) { console.error(err); showStatus('Copy failed.', true); }
 });
 
 copyNameBtn.addEventListener('click',   () => copyColumn('Name',   'Name'));
