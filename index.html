@@ -10,136 +10,39 @@
     :root { font-family: 'Segoe UI', Arial, sans-serif; color-scheme: light; }
     * { box-sizing: border-box; }
     body { margin: 0; background: #f0f4ff; color: #1e293b; }
-
     .app-shell { max-width: 1000px; margin: 0 auto; padding: 24px 16px; }
-
     header { margin-bottom: 20px; }
-    header h1 {
-      font-size: 1.8rem; font-weight: 800; color: #1e3a5f;
-      margin: 0 0 6px; letter-spacing: -0.5px;
-    }
+    header h1 { font-size: 1.8rem; font-weight: 800; color: #1e3a5f; margin: 0 0 6px; letter-spacing: -0.5px; }
     .subtitle { margin: 0; color: #4f6080; font-size: 0.95rem; }
-
-    .panel {
-      background: #fff;
-      border: 1px solid #dbe3ef;
-      border-radius: 14px;
-      padding: 20px;
-      margin-bottom: 16px;
-      box-shadow: 0 2px 12px rgb(30 60 120 / 7%);
-    }
-    .panel h2 {
-      margin: 0 0 12px;
-      font-size: 1.05rem;
-      color: #1e3a5f;
-      font-weight: 700;
-    }
-
-    /* API Key */
-    .api-key-row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 10px; }
-    .api-key-row input {
-      flex: 1; min-width: 260px;
-      padding: 10px 14px;
-      border: 1.5px solid #cbd5e1;
-      border-radius: 8px;
-      font-size: 0.95rem;
-      font-family: monospace;
-      outline: none;
-      transition: border-color .2s;
-    }
-    .api-key-row input:focus { border-color: #2563eb; }
-    #apiKeyStatus { margin: 8px 0 0; font-size: 0.9rem; min-height: 20px; }
-
-    /* File input */
+    .panel { background: #fff; border: 1px solid #dbe3ef; border-radius: 14px; padding: 20px; margin-bottom: 16px; box-shadow: 0 2px 12px rgb(30 60 120 / 7%); }
+    .panel h2 { margin: 0 0 12px; font-size: 1.05rem; color: #1e3a5f; font-weight: 700; }
     #imageInput { display: none; }
-    .upload-label {
-      display: inline-flex; align-items: center; gap: 8px;
-      background: #2563eb; color: #fff;
-      padding: 10px 20px; border-radius: 10px;
-      cursor: pointer; font-weight: 600; font-size: 0.95rem;
-      transition: background .15s;
-    }
+    .upload-label { display: inline-flex; align-items: center; gap: 8px; background: #2563eb; color: #fff; padding: 10px 20px; border-radius: 10px; cursor: pointer; font-weight: 600; font-size: 0.95rem; transition: background .15s; }
     .upload-label:hover { background: #1d4ed8; }
     .hint { color: #64748b; font-size: 0.88rem; margin: 8px 0 0; }
     #selectedCount { color: #2563eb; font-size: 0.9rem; font-weight: 600; margin: 6px 0 0; }
-
-    /* Preview grid */
-    .preview-grid {
-      margin-top: 14px;
-      display: grid;
-      grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));
-      gap: 10px;
-    }
-    .preview-card {
-      position: relative;
-      border: 1.5px solid #dbe3ef;
-      border-radius: 10px;
-      padding: 6px;
-      background: #f8fbff;
-    }
-    .preview-open-btn {
-      display: block; width: 100%; padding: 0;
-      background: transparent; border: 0;
-      cursor: pointer; text-align: left;
-    }
-    .preview-card img {
-      width: 100%; height: 76px;
-      object-fit: cover; border-radius: 6px; display: block;
-    }
-    .preview-name {
-      display: block; margin-top: 5px;
-      font-size: 11px; color: #475569;
-      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-    }
-    .preview-remove-btn {
-      position: absolute; top: 4px; right: 4px;
-      width: 22px; height: 22px;
-      border-radius: 50%; padding: 0;
-      background: rgba(15,23,42,.85); color: #fff;
-      border: 1px solid #fff; font-size: 13px;
-      cursor: pointer; line-height: 1;
-      display: flex; align-items: center; justify-content: center;
-    }
+    .preview-grid { margin-top: 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 10px; }
+    .preview-card { position: relative; border: 1.5px solid #dbe3ef; border-radius: 10px; padding: 6px; background: #f8fbff; }
+    .preview-open-btn { display: block; width: 100%; padding: 0; background: transparent; border: 0; cursor: pointer; text-align: left; }
+    .preview-card img { width: 100%; height: 76px; object-fit: cover; border-radius: 6px; display: block; }
+    .preview-name { display: block; margin-top: 5px; font-size: 11px; color: #475569; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .preview-remove-btn { position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%; padding: 0; background: rgba(15,23,42,.85); color: #fff; border: 1px solid #fff; font-size: 13px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .preview-remove-btn:hover { background: #b91c1c; }
-
-    /* Fields */
-    .field-grid {
-      display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px;
-    }
-    .field-grid label {
-      display: flex; align-items: center; gap: 6px;
-      font-size: 0.95rem; font-weight: 500; cursor: pointer;
-    }
-
-    /* Buttons */
-    button {
-      border: none; border-radius: 10px;
-      padding: 10px 16px; cursor: pointer;
-      background: #2563eb; color: #fff;
-      font-weight: 600; font-size: 0.9rem;
-      transition: background .15s, opacity .15s;
-    }
+    .field-grid { display: flex; flex-wrap: wrap; gap: 14px; margin-bottom: 16px; }
+    .field-grid label { display: flex; align-items: center; gap: 6px; font-size: 0.95rem; font-weight: 500; cursor: pointer; }
+    button { border: none; border-radius: 10px; padding: 10px 16px; cursor: pointer; background: #2563eb; color: #fff; font-weight: 600; font-size: 0.9rem; transition: background .15s, opacity .15s; }
     button:hover:not(:disabled) { background: #1d4ed8; }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
     .btn-secondary { background: #64748b; }
     .btn-secondary:hover:not(:disabled) { background: #475569; }
     .btn-dup { background: #7c3aed; }
     .btn-dup:hover:not(:disabled) { background: #6d28d9; }
-    #extractBtn {
-      background: linear-gradient(135deg, #2563eb, #7c3aed);
-      padding: 12px 28px; font-size: 1rem;
-      box-shadow: 0 4px 14px rgb(37 99 235 / 30%);
-    }
-    #extractBtn:hover:not(:disabled) {
-      background: linear-gradient(135deg, #1d4ed8, #6d28d9);
-    }
-
+    .btn-remove-dup { background: #dc2626; }
+    .btn-remove-dup:hover:not(:disabled) { background: #b91c1c; }
+    #extractBtn { background: linear-gradient(135deg, #2563eb, #7c3aed); padding: 12px 28px; font-size: 1rem; box-shadow: 0 4px 14px rgb(37 99 235 / 30%); }
+    #extractBtn:hover:not(:disabled) { background: linear-gradient(135deg, #1d4ed8, #6d28d9); }
     .actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
-
-    /* Status */
     .status { min-height: 22px; font-size: 0.93rem; margin-bottom: 10px; font-weight: 500; }
-
-    /* Table */
     .table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid #dbe3ef; }
     table { width: 100%; border-collapse: collapse; min-width: 700px; }
     th, td { border-bottom: 1px solid #e2e8f0; text-align: left; padding: 10px 12px; font-size: 0.9rem; }
@@ -148,43 +51,16 @@
     tr:hover td { background: #f8faff; }
     tr.dup-row td { background: #fff7ed; }
     tr.dup-row td:nth-child(3) { font-weight: 700; color: #c2410c; }
-
-    /* Image modal */
-    .image-modal {
-      position: fixed; inset: 0;
-      background: rgba(0,0,0,.8);
-      display: flex; flex-direction: column;
-      justify-content: center; align-items: center;
-      padding: 16px; z-index: 100;
-    }
+    .image-modal { position: fixed; inset: 0; background: rgba(0,0,0,.8); display: flex; flex-direction: column; justify-content: center; align-items: center; padding: 16px; z-index: 100; }
     .image-modal[hidden] { display: none !important; }
     .image-modal img { max-width: min(100%,900px); max-height: 80vh; border-radius: 10px; border: 2px solid #fff; }
     #modalCaption { color: #fff; margin-top: 10px; font-size: 0.9rem; }
-    .modal-close {
-      position: absolute; top: 18px; right: 18px;
-      width: 40px; height: 40px; border-radius: 50%;
-      background: #111827; border: 2px solid #fff;
-      color: #fff; font-size: 20px; cursor: pointer;
-      display: flex; align-items: center; justify-content: center;
-    }
-
-    /* Dup modal */
+    .modal-close { position: absolute; top: 18px; right: 18px; width: 40px; height: 40px; border-radius: 50%; background: #111827; border: 2px solid #fff; color: #fff; font-size: 20px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
     .dup-modal { justify-content: center; align-items: center; }
-    .dup-modal-box {
-      background: #fff; border-radius: 14px;
-      width: min(640px, 94vw); max-height: 80vh;
-      display: flex; flex-direction: column; overflow: hidden;
-      box-shadow: 0 20px 60px rgba(0,0,0,.4);
-    }
-    .dup-modal-header {
-      display: flex; align-items: center; justify-content: space-between;
-      padding: 16px 20px; border-bottom: 1px solid #dbe3ef; background: #eff6ff;
-    }
+    .dup-modal-box { background: #fff; border-radius: 14px; width: min(640px, 94vw); max-height: 80vh; display: flex; flex-direction: column; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,.4); }
+    .dup-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid #dbe3ef; background: #eff6ff; }
     .dup-modal-header h3 { margin: 0; font-size: 1.05rem; color: #1e3a5f; }
-    .modal-close-inline {
-      background: transparent; border: none; color: #334155;
-      font-size: 22px; padding: 0 4px; cursor: pointer; line-height: 1;
-    }
+    .modal-close-inline { background: transparent; border: none; color: #334155; font-size: 22px; padding: 0 4px; cursor: pointer; line-height: 1; }
     .modal-close-inline:hover { color: #b91c1c; }
     .dup-modal-body { padding: 16px 20px; overflow-y: auto; }
     .no-dup { color: #16a34a; font-weight: 600; }
@@ -200,20 +76,18 @@
 
   <header>
     <h1>📋 Screenshot Data Extractor</h1>
-    <p class="subtitle">Extract contacts from WhatsApp screenshots using Google Gemini AI — 1,500 images/day free.</p>
+    <p class="subtitle">Extract contacts from WhatsApp screenshots using Google Gemini AI — free via Puter.js.</p>
   </header>
 
-  <!-- Puter login info -->
   <section class="panel" style="background:#f0fdf4; border-color:#86efac;">
     <h2>✅ Free — No API Key Needed</h2>
     <p class="hint" style="color:#166534;">
       This app uses <strong>Puter.js</strong> with Google Gemini 2.5 Flash vision AI.<br/>
       First time only: a <strong>free Puter account login</strong> will pop up — just sign in with Google.
-      After that it works completely free with no limits.
+      After that it works completely free.
     </p>
   </section>
 
-  <!-- Upload -->
   <section class="panel">
     <h2>1) Upload Screenshots</h2>
     <label class="upload-label" for="imageInput">📁 Choose Files</label>
@@ -223,7 +97,6 @@
     <div id="previewGrid" class="preview-grid"></div>
   </section>
 
-  <!-- Fields -->
   <section class="panel">
     <h2>2) Choose Fields to Extract</h2>
     <div class="field-grid">
@@ -235,7 +108,6 @@
     <button id="extractBtn">⚡ Extract from Screenshots</button>
   </section>
 
-  <!-- Results -->
   <section class="panel">
     <h2>3) Results</h2>
     <div id="status" class="status"></div>
@@ -250,12 +122,11 @@
       <button id="downloadCsvBtn"  disabled>⬇ Download CSV</button>
       <button id="downloadXlsxBtn" disabled>⬇ Download Excel (.xlsx)</button>
       <button id="checkDupBtn"     disabled class="btn-dup">🔍 Check Duplicates</button>
+      <button id="removeDupBtn"    disabled class="btn-remove-dup">🗑 Remove Duplicates</button>
     </div>
     <div class="table-wrap">
       <table id="resultsTable">
-        <thead>
-          <tr><th>File</th><th>Name</th><th>Mobile</th><th>Email</th><th>UPI ID</th></tr>
-        </thead>
+        <thead><tr><th>File</th><th>Name</th><th>Mobile</th><th>Email</th><th>UPI ID</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -263,14 +134,12 @@
 
 </main>
 
-<!-- Image preview modal -->
 <div id="imageModal" class="image-modal" hidden>
-  <button id="closeModalBtn" class="modal-close" aria-label="Close">✕</button>
+  <button id="closeModalBtn" class="modal-close">✕</button>
   <img id="modalImage" alt="Preview" />
   <p id="modalCaption"></p>
 </div>
 
-<!-- Duplicate modal -->
 <div id="dupModal" class="image-modal dup-modal" hidden>
   <div class="dup-modal-box">
     <div class="dup-modal-header">
@@ -283,11 +152,6 @@
 
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script>
-/* ═══════════════════════════════════════════════════
-   APP.JS — embedded
-   ═══════════════════════════════════════════════════ */
-
-/* DOM refs */
 const imageInput       = document.getElementById('imageInput');
 const extractBtn       = document.getElementById('extractBtn');
 const copyBtn          = document.getElementById('copyBtn');
@@ -298,6 +162,7 @@ const copyUpiBtn       = document.getElementById('copyUpiBtn');
 const downloadCsvBtn   = document.getElementById('downloadCsvBtn');
 const downloadXlsxBtn  = document.getElementById('downloadXlsxBtn');
 const checkDupBtn      = document.getElementById('checkDupBtn');
+const removeDupBtn     = document.getElementById('removeDupBtn');
 const statusEl         = document.getElementById('status');
 const tableBody        = document.querySelector('#resultsTable tbody');
 const previewGrid      = document.getElementById('previewGrid');
@@ -309,17 +174,10 @@ const selectedCountEl  = document.getElementById('selectedCount');
 const dupModal         = document.getElementById('dupModal');
 const dupModalBody     = document.getElementById('dupModalBody');
 const closeDupModalBtn = document.getElementById('closeDupModalBtn');
-const apiKeyInput      = null; // removed - no API key needed
-const saveKeyBtn       = null; // removed
-const clearKeyBtn      = null; // removed
-const apiKeyStatus     = null; // removed
 
 const HEADERS = ['File','Name','Mobile','Email','UPI ID'];
 let extractedRows = [], previewUrls = [], selectedFiles = [];
 
-/* ── No API key needed - uses Puter.js ── */
-
-/* ── Helpers ── */
 function cleanStr(v) { return (v||'').replace(/\s+/g,' ').trim(); }
 function showStatus(msg, isError=false) {
   statusEl.textContent = msg;
@@ -327,10 +185,10 @@ function showStatus(msg, isError=false) {
 }
 function enableActions(on) {
   [copyBtn,copyNameBtn,copyMobileBtn,copyEmailBtn,copyUpiBtn,
-   downloadCsvBtn,downloadXlsxBtn,checkDupBtn].forEach(b => b.disabled = !on);
+   downloadCsvBtn,downloadXlsxBtn,checkDupBtn,removeDupBtn].forEach(b => b.disabled = !on);
 }
 
-/* ── Puter.js AI — Free, no API key needed ── */
+/* ── Puter.js AI ── */
 async function runOCR(file) {
   const prompt = `Look at this screenshot carefully. It shows a list of contacts or phone numbers.
 
@@ -346,7 +204,7 @@ Return ONLY a raw JSON array — no explanation, no markdown, no code fences:
 ]
 
 Rules:
-- Copy each number EXACTLY as shown, including country code (+91, +971 etc.)
+- Copy each number EXACTLY as shown including country code (+91, +971 etc.)
 - Remove spaces within the number, keep the + sign
 - If no country code shown, write number as-is
 - Do NOT change or guess any digit
@@ -354,17 +212,14 @@ Rules:
 - If nothing found, return []`;
 
   try {
-    // Pass file directly to puter.ai.chat — official Puter docs syntax
-    const response = await puter.ai.chat(prompt, file, { model: 'gemini-2.5-flash' });
+    const response = await puter.ai.chat(prompt, file, { model: 'google/gemini-2.5-flash' });
     const raw = typeof response === 'string'
       ? response
       : (response?.message?.content?.[0]?.text || response?.message?.content || '[]');
     const clean = raw.replace(/```json|```/g,'').trim();
     const parsed = JSON.parse(clean);
-
     if (!Array.isArray(parsed) || !parsed.length)
       return [{ file: file.name, name:'', mobile:'', email:'', upi:'' }];
-
     return parsed.map(r => ({
       file:   file.name,
       name:   cleanStr(r.name   || ''),
@@ -396,13 +251,11 @@ function applyFields(r, fields) {
   };
 }
 function getRows() { return extractedRows.map(toRow); }
-
 function getDups(rows) {
   const c = {};
   rows.forEach(r => { if(r.Mobile) c[r.Mobile] = (c[r.Mobile]||0)+1; });
   return new Set(Object.keys(c).filter(k => c[k]>1));
 }
-
 function renderTable(rows) {
   tableBody.innerHTML = '';
   const dups = getDups(rows);
@@ -417,7 +270,6 @@ function renderTable(rows) {
     tableBody.appendChild(tr);
   });
 }
-
 function toTSV(rows) {
   const e = v => (v??'').toString().replace(/\t/g,' ').replace(/\n/g,' ');
   return [HEADERS.join('\t'), ...rows.map(r => HEADERS.map(k=>e(r[k])).join('\t'))].join('\n');
@@ -433,7 +285,7 @@ function dlFile(content, name, mime) {
 }
 function copyCol(key, label) {
   navigator.clipboard.writeText(getRows().map(r=>r[key]||'').join('\n'))
-    .then(()=>showStatus(`Copied ${label} column.`))
+    .then(()=>showStatus(`✅ Copied ${label} column.`))
     .catch(()=>showStatus('Copy failed.',true));
 }
 
@@ -490,12 +342,27 @@ function showDups() {
   dupModal.hidden=false;
 }
 
+/* ── Remove Duplicates ── */
+function removeDups() {
+  const before = extractedRows.length;
+  const seen   = new Set();
+  extractedRows = extractedRows.filter(r => {
+    const key = r.mobile ? r.mobile.trim() : null;
+    if (!key) return true;           // keep rows with no mobile
+    if (seen.has(key)) return false; // duplicate — remove
+    seen.add(key);
+    return true;
+  });
+  const removed = before - extractedRows.length;
+  renderTable(getRows());
+  showStatus(`✅ Removed ${removed} duplicate(s). ${extractedRows.length} row(s) remaining.`);
+}
+
 /* ── Events ── */
 imageInput.addEventListener('change', ()=>{
   addFiles(Array.from(imageInput.files||[]));
   renderPreviews(); updateCount(); imageInput.value='';
 });
-
 closeModalBtn.addEventListener('click', ()=>{ imageModal.hidden=true; });
 imageModal.addEventListener('click', e=>{ if(e.target===imageModal) imageModal.hidden=true; });
 closeDupModalBtn.addEventListener('click', ()=>{ dupModal.hidden=true; });
@@ -508,9 +375,7 @@ extractBtn.addEventListener('click', async ()=>{
   const files=selectedFiles, fields=selectedFields();
   if(!files.length){ showStatus('Please upload at least one screenshot.',true); return; }
   if(!fields.length){ showStatus('Please select at least one field.',true); return; }
-
   extractBtn.disabled=true; enableActions(false); extractedRows=[]; renderTable([]);
-
   try {
     for(let i=0;i<files.length;i++){
       showStatus(`Processing ${i+1}/${files.length}: ${files[i].name} …`);
@@ -523,7 +388,7 @@ extractBtn.addEventListener('click', async ()=>{
     renderTable(rows); enableActions(rows.length>0);
     const mc   = rows.filter(r=>r.Mobile).length;
     const dups = getDups(rows);
-    const dm   = dups.size ? `  ⚠️ ${dups.size} duplicate(s) found.` : '';
+    const dm   = dups.size ? `  ⚠️ ${dups.size} duplicate(s) — click 🗑 Remove Duplicates to clean.` : '';
     showStatus(`✅ Done. ${rows.length} row(s) · ${mc} mobile number(s).${dm}`);
   } catch(err){
     console.error(err); showStatus('Extraction failed.',true);
@@ -533,13 +398,12 @@ extractBtn.addEventListener('click', async ()=>{
 copyBtn.addEventListener('click', async ()=>{
   const rows=getRows(); if(!rows.length) return;
   await navigator.clipboard.writeText(toTSV(rows));
-  showStatus('Copied. Paste into Google Sheets or Excel.');
+  showStatus('✅ Copied. Paste into Google Sheets or Excel.');
 });
 copyNameBtn.addEventListener('click',   ()=>copyCol('Name','Name'));
 copyMobileBtn.addEventListener('click', ()=>copyCol('Mobile','Mobile'));
 copyEmailBtn.addEventListener('click',  ()=>copyCol('Email','Email'));
 copyUpiBtn.addEventListener('click',    ()=>copyCol('UPI ID','UPI ID'));
-
 downloadCsvBtn.addEventListener('click', ()=>{
   const rows=getRows(); if(!rows.length) return;
   dlFile(toCSV(rows),'extracted_data.csv','text/csv;charset=utf-8');
@@ -552,6 +416,7 @@ downloadXlsxBtn.addEventListener('click', ()=>{
   XLSX.writeFile(wb,'extracted_data.xlsx');
 });
 checkDupBtn.addEventListener('click', showDups);
+removeDupBtn.addEventListener('click', removeDups);
 </script>
 </body>
 </html>
